@@ -83,7 +83,7 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t size)
     
 static const iocshFuncDef mdDef =
     { "md", 3, (const iocshArg *[]) {
-    &(iocshArg) { "[{A16|A24|A32|CRCSR}:]address", iocshArgString },
+    &(iocshArg) { "[addrspace:]address", iocshArgString },
     &(iocshArg) { "[wordsize={1|2|4|8|-2|-4|-8}]", iocshArgInt },
     &(iocshArg) { "[bytes]", iocshArgInt },
 }};
@@ -100,15 +100,19 @@ static void mdFunc (const iocshArgBuf *args)
  
     if (bytes == 0) bytes = old_bytes;
     if (wordsize == 0) wordsize = old_wordsize;
-    if (args[0].sval == NULL)
+    if ((!args[0].sval && !old_addr.ptr) || (args[0].sval && args[0].sval[0] == '?'))
     {
-        if (!old_addr.ptr)
-        {
-            iocshCmd("help md");
-            return;
-        }
-        addr = old_addr;
+        struct addressHandlerMap* map;
+
+        iocshCmd("help md");
+        printf("Installed address spaces:\n");
+        for (map = addressHandlerList; map != NULL; map = map->next)
+            printf("%s ", map->str);
+        printf("\n");
+        return;
     }
+    if (!args[0].sval)
+        addr = old_addr;
     else
         addr = stringToAddr(ptr, bytes);
     if (!addr.ptr)
