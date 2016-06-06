@@ -39,7 +39,7 @@ access to invalid addresses so that the program will not crash.
 This iocsh function calls memDisplay.
 The `address` parameter can be a number (may be hex) to denote a
 memory location, but it can also be the name of a global variable
-(or other symbol, e.g. a function).
+(or other global symbol, e.g. a function).
 Furthermore, `address` can be a number prefixed by `A16:`, `A24:`,
 `A32:` or `CRCSR:` to display VME address regions, for example `A16:0x8000`.
 
