@@ -16,9 +16,9 @@ Output looks like this:
 
 ### memDisplay
 
-    int memDisplay(size_t base, volatile void* ptr, int wordsize, size_t bytes)
-    int fmemDisplay(FILE* outfile, size_t base, volatile void* ptr, int wordsize, size_t bytes)
-    int fdmemDisplay(int outfd, size_t base, volatile void* ptr, int wordsize, size_t bytes)
+    int memDisplay(size_t base, volatile void* ptr, int wordsize, size_t bytes);
+    int fmemDisplay(FILE* outfile, size_t base, volatile void* ptr, int wordsize, size_t bytes);
+    int fdmemDisplay(int outfd, size_t base, volatile void* ptr, int wordsize, size_t bytes);
 
 Display memory region starting at `ptr` of length `bytes` in hex and ASCII.
 Output goes to `stdout` or the file `outfile` or the file descriptor `outfd`.
@@ -65,8 +65,8 @@ the `md` function. In particular the same syntax for `address` can be used.
 
 ### memDisplayInstallAddrHandler
 
-    typedef volatile void* (*memDisplayAddrHandler) (size_t addr, size_t size, size_t usr)
-    void memDisplayInstallAddrHandler(const char* str, memDisplayAddrHandler handler, size_t usr)
+    typedef volatile void* (*memDisplayAddrHandler) (size_t addr, size_t size, size_t usr);
+    void memDisplayInstallAddrHandler(const char* str, memDisplayAddrHandler handler, size_t usr);
 
 This function can be used to install new handlers for the `address`
 parameter of the above iocsh functions.
