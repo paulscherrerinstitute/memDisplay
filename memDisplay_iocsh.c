@@ -80,14 +80,14 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t size)
     return (remote_addr_t){ptr, addr};
 }
     
-static const iocshFuncDef memDisplayDef =
-    { "memDisplay", 3, (const iocshArg *[]) {
+static const iocshFuncDef mdDef =
+    { "md", 3, (const iocshArg *[]) {
     &(iocshArg) { "[{A16|A24|A32|CRCSR}:]address", iocshArgString },
     &(iocshArg) { "[wordsize={1|2|4|8|-2|-4|-8}]", iocshArgInt },
     &(iocshArg) { "[bytes]", iocshArgInt },
 }};
 
-static void memDisplayFunc (const iocshArgBuf *args)
+static void mdFunc (const iocshArgBuf *args)
 {
     const char* ptr = args[0].sval;
     int wordsize = args[1].ival;
@@ -103,7 +103,7 @@ static void memDisplayFunc (const iocshArgBuf *args)
     {
         if (!old_addr.ptr)
         {
-            iocshCmd("help memDisplay");
+            iocshCmd("help md");
             return;
         }
         addr = old_addr;
@@ -233,7 +233,7 @@ static void memDisplayRegistrar(void)
     memDisplayInstallAddrHandler("A32",       VME_AddrHandler, atVMEA32);
     memDisplayInstallAddrHandler("CRCSR",     VME_AddrHandler, atVMECSR);
 
-    iocshRegister(&memDisplayDef, memDisplayFunc);
+    iocshRegister(&mdDef, mdFunc);
     iocshRegister(&devReadProbeDef, devReadProbeFunc);
     iocshRegister(&devWriteProbeDef, devWriteProbeFunc);
 }
