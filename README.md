@@ -24,7 +24,7 @@ Display memory region starting at `ptr` of length `bytes` in hex and ASCII.
 Output goes to `stdout` or the file `outfile` or the file descriptor `outfd`.
 Lines of 16 bytes are prefixed with a hex address starting at `base`
 (which may be different from `ptr`, for example for memory mapped devices).
-The hex numbers can be displayed as 1, 2, 4, or 8 (`wordsize`) bytes wide words.
+The hex words can be displayed as 1, 2, 4, or 8 (`wordsize`) bytes wide words.
 If `wordsize` is negative, the words are displayed byte swapped.
 
 A signal handler is active during the execution of `memDisplay` to catch any
