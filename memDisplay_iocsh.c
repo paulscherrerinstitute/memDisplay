@@ -58,7 +58,8 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t size)
         addr = strtoul(p+1, NULL, 0);
         for (map = addressHandlerList; map != NULL; map = map->next)
         {
-            if (strncmp(addrstr, map->str, p-addrstr) == 0)
+            if (strlen(map->str) == p-addrstr &&
+                strncmp(addrstr, map->str, p-addrstr) == 0)
             {
                 ptr = map->handler(addr, size, map->usr);
                 if (!ptr)
