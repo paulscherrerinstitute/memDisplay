@@ -18,10 +18,9 @@ Output looks like this:
 
     int memDisplay(size_t base, volatile void* ptr, int wordsize, size_t bytes);
     int fmemDisplay(FILE* outfile, size_t base, volatile void* ptr, int wordsize, size_t bytes);
-    int fdmemDisplay(int outfd, size_t base, volatile void* ptr, int wordsize, size_t bytes);
 
 Display memory region starting at `ptr` of length `bytes` in hex and ASCII.
-Output goes to `stdout` or the file `outfile` or the file descriptor `outfd`.
+Output goes to `stdout` or the file `outfile`.
 Lines of 16 bytes are prefixed with a hex address starting at `base`
 (which may be different from `ptr`, for example for memory mapped devices).
 The memory can be displayed as 1, 2, 4, or 8 (`wordsize`) bytes wide words.

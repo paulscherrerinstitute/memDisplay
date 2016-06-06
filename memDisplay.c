@@ -40,15 +40,6 @@ int memDisplay(size_t base, volatile void* ptr, int wordsize, size_t bytes)
     return fmemDisplay(stdout, base, ptr, wordsize, bytes);
 }
 
-int fdmemDisplay(int fd, size_t base, volatile void* ptr, int wordsize, size_t bytes)
-{
-    int n=-1;
-    FILE* file = fdopen(fd, "w");
-    if (file) n = fmemDisplay(file, base, ptr, wordsize, bytes);
-    free(file); /* do not fclose(file) file because that would close(fd) */
-    return n;
-}
-
 #ifdef vxWorks
 #define SIGNAL SIGBUS
 #else
