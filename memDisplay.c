@@ -35,16 +35,16 @@
 #include "memDisplay.h"
 
 
-int memDisplay(size_t base, volatile void* ptr, int width, size_t bytes)
+int memDisplay(size_t base, volatile void* ptr, int wordsize, size_t bytes)
 {
-    return fmemDisplay(stdout, base, ptr, width, bytes);
+    return fmemDisplay(stdout, base, ptr, wordsize, bytes);
 }
 
-int fdmemDisplay(int fd, size_t base, volatile void* ptr, int width, size_t bytes)
+int fdmemDisplay(int fd, size_t base, volatile void* ptr, int wordsize, size_t bytes)
 {
     int n=-1;
     FILE* file = fdopen(fd, "w");
-    if (file) n = fmemDisplay(file, base, ptr, width, bytes);
+    if (file) n = fmemDisplay(file, base, ptr, wordsize, bytes);
     free(file); /* do not fclose(file) file because that would close(fd) */
     return n;
 }
@@ -67,9 +67,9 @@ static void memDisplaySigAction(int sig, siginfo_t *info, void *ctx)
     longjmp(memDisplayFail, 1);
 }
 
-int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int width, size_t bytes)
+int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_t bytes)
 {
-    int addr_width = ((base + bytes - 1) & UINT64_C(0xffff000000000000)) ? 16 :
+    int addr_wordsize = ((base + bytes - 1) & UINT64_C(0xffff000000000000)) ? 16 :
                      ((base + bytes - 1) &     UINT64_C(0xffff00000000)) ? 12 :
                      ((base + bytes - 1) &         UINT64_C(0xffff0000)) ? 8 : 4;
 
@@ -79,22 +79,22 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int width, size_t b
     struct sigaction sa = {{0}}, oldsa;
 
     unsigned char buffer[16];
-    int swap = width < 0;
-    width = abs(width);
+    int swap = wordsize < 0;
+    wordsize = abs(wordsize);
     
-    switch (width)
+    switch (wordsize)
     {
         case 8:
         case 4:
         case 2:
             /* align start */
-            base &= ~(size_t)(width-1);
-            ptr = (volatile void*)((size_t)ptr & ~(size_t)(width-1));
-            base &= ~(size_t)(width-1);
+            base &= ~(size_t)(wordsize-1);
+            ptr = (volatile void*)((size_t)ptr & ~(size_t)(wordsize-1));
+            base &= ~(size_t)(wordsize-1);
         case 1:
             break;
         default:
-            fprintf(stdout, "Invalid data width %d\n", width);
+            fprintf(stdout, "Invalid data wordsize %d\n", wordsize);
             return -1;
     }
 
@@ -126,8 +126,8 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int width, size_t b
 
     for (i = 0; i < size; i += 16)
     {   
-        len += fprintf(file, "%0*llx: ", addr_width, (long long unsigned int)offset);
-        switch (width)
+        len += fprintf(file, "%0*llx: ", addr_wordsize, (long long unsigned int)offset);
+        switch (wordsize)
         {
             case 1:
                 for (j = 0; j < 16; j++)
