@@ -16,24 +16,25 @@ Output looks like this:
 
 ### memDisplay
 
-`int memDisplay(size_t base, volatile void* ptr, int wordsize, size_t bytes)`
-`int fmemDisplay(FILE* outfile, size_t base, volatile void* ptr, int wordsize, size_t bytes)`
-`int fdmemDisplay(int outfd, size_t base, volatile void* ptr, int wordsize, size_t bytes)`
+    int memDisplay(size_t base, volatile void* ptr, int wordsize, size_t bytes)
+    int fmemDisplay(FILE* outfile, size_t base, volatile void* ptr, int wordsize, size_t bytes)
+    int fdmemDisplay(int outfd, size_t base, volatile void* ptr, int wordsize, size_t bytes)
 
 Display memory region starting at `ptr` of length `bytes` in hex and ASCII.
+Output goes to `stdout` or the file `outfile` or the file descriptor `outfd`.
 Lines of 16 bytes are prefixed with a hex address starting at `base` which
 may be different from `ptr`, for example for memory mapped devices.
-The hex numbers can be displays 1, 2, 4, or 8 (`wordsize`) bytes wide words.
-If `wordsize` is negative, the words are displayed bytes swapped.
+The hex numbers can be displayed as 1, 2, 4, or 8 (`wordsize`) bytes wide words.
+If `wordsize` is negative, the words are displayed byte swapped.
 
-A signal handler is active during the execution of `memDisplay` in order
-to catch access to invalid addresses so that the program will noch crash.
+A signal handler is active during the execution of `memDisplay` to catch any
+access to invalid addresses so that the program will not crash.
 
 ## iocsh functions
 
 ### md
 
-`md address wordsize bytes`
+    md address wordsize bytes
 
 This iocsh function calls memDisplay.
 The `address` parameter can be a number (may be hex) to denote a
@@ -47,13 +48,13 @@ Other handlers of the form `xxx:` can be installed (see below).
 If `wordsize` or `bytes` is not specified, the prevous value is used,
 starting with wordsize 2 and 64 bytes.
 
-If `address` is not specified, the block directly following the block
-from the prevoius call is displayed.
+If `address` is not specified, the memory block directly following the
+block of the prevoius call is displayed.
 
 ### devReadProbe and devWriteProbe
 
-`devReadProbe wordsize address` 
-`devWriteProbe wordsize address value`
+    devReadProbe wordsize address
+    devWriteProbe wordsize address value
 
 These are iocsh wrappers for the devLib functions of the same name.
 
@@ -64,10 +65,10 @@ the `md` function. In particular the same syntax for `address` can be used.
 
 ### memDisplayInstallAddrHandler
 
-`typedef volatile void* (*memDisplayAddrHandler) (size_t addr, size_t size, size_t usr)` 
-`void memDisplayInstallAddrHandler(const char* str, memDisplayAddrHandler handler, size_t usr)`
+    typedef volatile void* (*memDisplayAddrHandler) (size_t addr, size_t size, size_t usr)
+    void memDisplayInstallAddrHandler(const char* str, memDisplayAddrHandler handler, size_t usr)
 
-This function can be used to install new handlers for the address
+This function can be used to install new handlers for the `address`
 parameter of the above iocsh functions.
 
 The handler function is supposed to map an address region to a pointer.
