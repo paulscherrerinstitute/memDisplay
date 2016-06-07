@@ -73,7 +73,7 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
         return (remote_addr_t){NULL, 0};
     }
 #ifdef symbolname_h
-    addr = (size_t)(ptr = symbolAddr(addrstr));
+    addr = (size_t)(ptr = symbolAddr(addrstr) + offs);
 #endif
     if (!addr) ptr = (volatile void*)(addr = strtoul(addrstr, NULL, 0) + offs);
     if (!addr) printf("Invalid address %s.\n", addrstr);
