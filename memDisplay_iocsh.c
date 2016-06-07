@@ -29,7 +29,6 @@ struct addressHandlerMap {
     struct addressHandlerMap* next;
 } *addressHandlerList = NULL;
 
-
 void memDisplayInstallAddrHandler(const char* str, memDisplayAddrHandler handler, size_t usr)
 {
     struct addressHandlerMap* map = malloc(sizeof(struct addressHandlerMap));
@@ -46,7 +45,7 @@ void memDisplayInstallAddrHandler(const char* str, memDisplayAddrHandler handler
 }
 
 typedef struct {volatile void* ptr; size_t offs;} remote_addr_t;
-static remote_addr_t stringToAddr(const char* addrstr, size_t size)
+static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
 {
     size_t addr = 0;
     volatile void* ptr;
@@ -55,7 +54,7 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t size)
     if ((p = strchr(addrstr, ':')) != NULL)
     {
         struct addressHandlerMap* map;
-        addr = strtoul(p+1, NULL, 0);
+        addr = strtoul(p+1, NULL, 0) + offs;
         for (map = addressHandlerList; map != NULL; map = map->next)
         {
             if (strlen(map->str) == p-addrstr &&
@@ -76,7 +75,7 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t size)
 #ifdef symbolname_h
     addr = (size_t)(ptr = symbolAddr(addrstr));
 #endif
-    if (!addr) ptr = (volatile void*)(addr = strtoul(addrstr, NULL, 0));
+    if (!addr) ptr = (volatile void*)(addr = strtoul(addrstr, NULL, 0) + offs);
     if (!addr) printf("Invalid address %s.\n", addrstr);
     return (remote_addr_t){ptr, addr};
 }
@@ -90,13 +89,15 @@ static const iocshFuncDef mdDef =
 
 static void mdFunc (const iocshArgBuf *args)
 {
-    const char* ptr = args[0].sval;
+    const char* addressStr = args[0].sval;
     int wordsize = args[1].ival;
     int bytes = args[2].ival;
     remote_addr_t addr;
     static remote_addr_t old_addr = {0};
     static int old_wordsize = 2;
     static int old_bytes = 0x80;
+    static char* old_addressStr;
+    static size_t old_offs;
  
     if (bytes == 0) bytes = old_bytes;
     if (wordsize == 0) wordsize = old_wordsize;
@@ -111,10 +112,17 @@ static void mdFunc (const iocshArgBuf *args)
         printf("\n");
         return;
     }
-    if (!args[0].sval)
-        addr = old_addr;
+    if (args[0].sval)
+    {
+        free(old_addressStr);
+        old_addressStr = epicsStrDup(addressStr);
+        old_offs = 0;
+    }
     else
-        addr = stringToAddr(ptr, bytes);
+    {
+        addressStr = old_addressStr;
+    }
+    addr = stringToAddr(addressStr, old_offs, bytes);
     if (!addr.ptr)
         return;
     if (memDisplay(addr.offs, addr.ptr, wordsize, bytes) < 0)
@@ -122,10 +130,10 @@ static void mdFunc (const iocshArgBuf *args)
         old_addr = (remote_addr_t){0};
         return;
     }
+    old_offs += bytes;
     old_wordsize = wordsize;
     old_bytes = bytes;
-    old_addr.ptr = addr.ptr + bytes;
-    old_addr.offs = addr.offs + bytes;
+    old_addr = addr;
 }
 
 static const iocshFuncDef devReadProbeDef =
@@ -139,14 +147,14 @@ static void devReadProbeFunc (const iocshArgBuf *args)
     epicsUInt32 val = 0;
     remote_addr_t addr;
     int wordsize = args[0].ival;
-    const char* ptr = args[1].sval;
+    const char* address = args[1].sval;
         
-    if (!ptr)
+    if (!address)
     {
         iocshCmd("help devReadProbe");
         return;
     }
-    addr = stringToAddr(ptr, wordsize);
+    addr = stringToAddr(address, 0, wordsize);
     
     switch (devReadProbe(wordsize, addr.ptr, &val))
     {
@@ -189,14 +197,14 @@ static void devWriteProbeFunc (const iocshArgBuf *args)
     epicsUInt32 val;
     remote_addr_t addr;
     int wordsize = args[0].ival;
-    const char* ptr = args[1].sval;
+    const char* address = args[1].sval;
     
-    if (!ptr)
+    if (!address)
     {
         iocshCmd("help devWriteProbe");
         return;
     }
-    addr = stringToAddr(ptr, wordsize);
+    addr = stringToAddr(address, 0, wordsize);
     
     switch (wordsize)
     {
