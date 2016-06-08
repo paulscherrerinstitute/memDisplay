@@ -241,10 +241,10 @@ static void memDisplayRegistrar(void)
     /* Make sure that devLibInit has been called (call will fail) */
     if (pdevLibVirtualOS) devRegisterAddress(NULL, 0, 0, 0, NULL);
 
-    memDisplayInstallAddrHandler("A16",       VME_AddrHandler, atVMEA16);
-    memDisplayInstallAddrHandler("A24",       VME_AddrHandler, atVMEA24);
-    memDisplayInstallAddrHandler("A32",       VME_AddrHandler, atVMEA32);
-    memDisplayInstallAddrHandler("CRCSR",     VME_AddrHandler, atVMECSR);
+    memDisplayInstallAddrHandler("A16",   VME_AddrHandler, atVMEA16);
+    memDisplayInstallAddrHandler("A24",   VME_AddrHandler, atVMEA24);
+    memDisplayInstallAddrHandler("A32",   VME_AddrHandler, atVMEA32);
+    memDisplayInstallAddrHandler("CRCSR", VME_AddrHandler, atVMECSR);
 
     iocshRegister(&mdDef, mdFunc);
     iocshRegister(&devReadProbeDef, devReadProbeFunc);
