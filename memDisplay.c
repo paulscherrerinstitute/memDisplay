@@ -1,12 +1,18 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
-#include <signal.h>
-#include <setjmp.h>
 
 #ifdef __unix
 #define HAVE_byteswap
 #define HAVE_stdint
+#define HAVE_setjmp_and_signal
+#define SIGNAL SIGSEGV
+#endif
+
+#ifdef vxWorks
+#define HAVE_setjmp
+#define HAVE_setjmp_and_signal
+#define SIGNAL SIGBUS
 #endif
 
 #ifdef HAVE_byteswap
@@ -32,6 +38,11 @@
 #define uint32_t unsigned int
 #endif
 
+#ifdef HAVE_setjmp_and_signal
+#include <signal.h>
+#include <setjmp.h>
+#endif
+
 #include "memDisplay.h"
 
 
@@ -40,12 +51,7 @@ int memDisplay(size_t base, volatile void* ptr, int wordsize, size_t bytes)
     return fmemDisplay(stdout, base, ptr, wordsize, bytes);
 }
 
-#ifdef vxWorks
-#define SIGNAL SIGBUS
-#else
-#define SIGNAL SIGSEGV
-#endif
-
+#ifdef HAVE_setjmp_and_signal
 /* setup handler to catch unmapped addresses */
 static jmp_buf memDisplayFail;
 static void memDisplaySigAction(int sig, siginfo_t *info, void *ctx)
@@ -57,17 +63,20 @@ static void memDisplaySigAction(int sig, siginfo_t *info, void *ctx)
 #endif
     longjmp(memDisplayFail, 1);
 }
+#endif /* HAVE_setjmp_and_signal */
 
 int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_t bytes)
 {
     int addr_wordsize = ((base + bytes - 1) & UINT64_C(0xffff000000000000)) ? 16 :
-                     ((base + bytes - 1) &     UINT64_C(0xffff00000000)) ? 12 :
-                     ((base + bytes - 1) &         UINT64_C(0xffff0000)) ? 8 : 4;
+                        ((base + bytes - 1) &     UINT64_C(0xffff00000000)) ? 12 :
+                        ((base + bytes - 1) &         UINT64_C(0xffff0000)) ? 8 : 4;
 
     uint64_t offset;
     size_t i, j, size, len=0;
 
+#ifdef HAVE_setjmp_and_signal
     struct sigaction sa = {{0}}, oldsa;
+#endif /* HAVE_setjmp_and_signal */
 
     unsigned char buffer[16];
     int swap = wordsize < 0;
@@ -95,6 +104,7 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
     ptr = (void*)(((size_t)ptr) & ~15);
     memset(buffer, ' ', sizeof(buffer));
     
+#ifdef HAVE_setjmp_and_signal
     sa.sa_sigaction = memDisplaySigAction;
     sa.sa_flags = SA_SIGINFO;
 #ifdef SA_NODEFER
@@ -114,6 +124,7 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
         sigaction(SIGNAL, &oldsa, NULL);
         return -1;
     }
+#endif /* HAVE_setjmp_and_signal */
 
     for (i = 0; i < size; i += 16)
     {   
@@ -197,6 +208,8 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
         ptr += 16;
         len += fprintf(file, "\n");
     }
+#ifdef HAVE_setjmp_and_signal
     sigaction(SIGNAL, &oldsa, NULL);
+#endif /* HAVE_setjmp_and_signal */
     return len;
 }
