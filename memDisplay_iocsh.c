@@ -14,11 +14,19 @@
 
 static volatile void* VME_AddrHandler(size_t addr, size_t size, size_t addrSpace)
 {
+    static int first_time = 1;
     volatile void* ptr;
     if (!pdevLibVirtualOS) {
         printf("No VME support available.\n");
         return NULL;
     }
+    if (first_time)
+    {
+        /* Make sure that devLibInit has been called (call will fail) */
+        /* We want to map but not register and thus block the address space.*/
+        devRegisterAddress(NULL, 0, 0, 0, NULL);
+        first_time = 0;
+    }    
     return pdevLibVirtualOS->pDevMapAddr(addrSpace, 0, addr, size, &ptr) == S_dev_success ? ptr : NULL;
 }
 
@@ -238,9 +246,6 @@ static void devWriteProbeFunc (const iocshArgBuf *args)
 
 static void memDisplayRegistrar(void)
 {
-    /* Make sure that devLibInit has been called (call will fail) */
-    if (pdevLibVirtualOS) devRegisterAddress(NULL, 0, 0, 0, NULL);
-
     memDisplayInstallAddrHandler("A16",   VME_AddrHandler, atVMEA16);
     memDisplayInstallAddrHandler("A24",   VME_AddrHandler, atVMEA24);
     memDisplayInstallAddrHandler("A32",   VME_AddrHandler, atVMEA32);
