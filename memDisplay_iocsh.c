@@ -102,7 +102,7 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
             printf("Invalid address space %.*s.\n", (int)(p-addrstr), addrstr);
             return (remote_addr_t){NULL, 0};
         }
-#ifdef symbolname_h
+#ifdef WITH_SYMBOLNAME
         addr = (size_t)(ptr = (char*)symbolAddr(addrstr) + offs);
 #endif
         if (!addr) ptr = (volatile void*)(addr = strtoul(addrstr, NULL, 0) + offs);
