@@ -10,9 +10,10 @@
 #endif
 
 #ifdef vxWorks
-#define HAVE_setjmp
 #define HAVE_setjmp_and_signal
 #define SIGNAL SIGBUS
+#define bswap_16(x) WORDSWAP(x)
+#define bswap_32(x) LONGSWAP(x)
 #endif
 
 #ifdef _WIN32
@@ -22,41 +23,32 @@
 #define bswap_64(x) _byteswap_uint64(x)
 #endif
 
-#ifdef HAVE_stdint
-#include <stdint.h>
-#else
-#define uint32_t unsigned int
-#define UINT64_C(c) c ## ULL
-#endif
-
-#ifdef HAVE_setjmp_and_signal
-#include <signal.h>
-#include <setjmp.h>
-#endif
-
 #ifdef HAVE_byteswap
 #include <byteswap.h>
-#else
-
-#ifndef bswap_16
-#define bswap_16(x) ((((x) & 0x00ff) << 8) | (((x) & 0xff00) >> 8))
-#endif
-
-#ifndef bswap_32
-#define bswap_32(x) ((((x) & 0xff000000) >> 24) | (((x) & 0x00ff0000) >>  8) | \
-                    (((x) & 0x0000ff00) <<  8) | (((x) & 0x000000ff) << 24))
 #endif
 
 #ifndef bswap_64
 #define bswap_64(x) ((((x) & 0xff00000000000000ull) >> 56) \
                    | (((x) & 0x00ff000000000000ull) >> 40) \
                    | (((x) & 0x0000ff0000000000ull) >> 24) \
-                   | (((x) & 0x000000ff00000000ull) >> 8)  \
-                   | (((x) & 0x00000000ff000000ull) << 8)  \
+                   | (((x) & 0x000000ff00000000ull) >>  8) \
+                   | (((x) & 0x00000000ff000000ull) <<  8) \
                    | (((x) & 0x0000000000ff0000ull) << 24) \
                    | (((x) & 0x000000000000ff00ull) << 40) \
                    | (((x) & 0x00000000000000ffull) << 56))
 #endif
+
+#ifdef HAVE_stdint
+#include <stdint.h>
+#else
+#define uint32_t unsigned int
+#define uint64_t unsigned long long int
+#define UINT64_C(c) c ## ULL
+#endif
+
+#ifdef HAVE_setjmp_and_signal
+#include <signal.h>
+#include <setjmp.h>
 #endif
 
 #include "memDisplay.h"
