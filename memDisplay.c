@@ -25,14 +25,19 @@
 #ifdef HAVE_byteswap
 #include <byteswap.h>
 #else
+#ifndef UINT64_C
 #define UINT64_C(c) c ## ULL
+#endif
+
 #ifndef bswap_16
 #define bswap_16(x) ((((x) & 0x00ff) << 8) | (((x) & 0xff00) >> 8))
 #endif
+
 #ifndef bswap_32
 #define bswap_32(x) ((((x) & 0xff000000) >> 24) | (((x) & 0x00ff0000) >>  8) | \
                     (((x) & 0x0000ff00) <<  8) | (((x) & 0x000000ff) << 24))
 #endif
+
 #ifndef bswap_64
 #define bswap_64(x) ((((x) & 0xff00000000000000ull) >> 56) \
                    | (((x) & 0x00ff000000000000ull) >> 40) \
@@ -224,5 +229,5 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
 #ifdef HAVE_setjmp_and_signal
     sigaction(SIGNAL, &oldsa, NULL);
 #endif /* HAVE_setjmp_and_signal */
-    return len;
+    return (int)len;
 }
