@@ -15,13 +15,25 @@
 #define SIGNAL SIGBUS
 #endif
 
+#ifdef _WIN32
+#define HAVE_stdint
+#define bswap_16(x) _byteswap_ushort(x)
+#define bswap_32(x) _byteswap_ulong(x)
+#define bswap_64(x) _byteswap_uint64(x)
+#endif
+
 #ifdef HAVE_byteswap
 #include <byteswap.h>
 #else
 #define UINT64_C(c) c ## ULL
+#ifndef bswap_16
 #define bswap_16(x) ((((x) & 0x00ff) << 8) | (((x) & 0xff00) >> 8))
+#endif
+#ifndef bswap_32
 #define bswap_32(x) ((((x) & 0xff000000) >> 24) | (((x) & 0x00ff0000) >>  8) | \
                     (((x) & 0x0000ff00) <<  8) | (((x) & 0x000000ff) << 24))
+#endif
+#ifndef bswap_64
 #define bswap_64(x) ((((x) & 0xff00000000000000ull) >> 56) \
                    | (((x) & 0x00ff000000000000ull) >> 40) \
                    | (((x) & 0x0000ff0000000000ull) >> 24) \
@@ -30,6 +42,7 @@
                    | (((x) & 0x0000000000ff0000ull) << 24) \
                    | (((x) & 0x000000000000ff00ull) << 40) \
                    | (((x) & 0x00000000000000ffull) << 56))
+#endif
 #endif
 
 #ifdef HAVE_stdint
@@ -141,7 +154,7 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
                     }
                     else
                     {
-                        x = *(uint8_t*)(ptr + j);
+                        x = *(uint8_t*)((char*)ptr + j);
                         *(uint8_t*)(buffer + j) = x;
                         len += fprintf(file, "%02x ", x);
                     }
@@ -157,7 +170,7 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
                     }
                     else
                     {
-                        x = *(uint16_t*)(ptr + j);
+                        x = *(uint16_t*)((char*)ptr + j);
                         if (swap) x = bswap_16(x);
                         *(uint16_t*)(buffer + j) = x;
                         len += fprintf(file, "%04x ", x);
@@ -174,7 +187,7 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
                     }
                     else
                     {
-                        x = *(uint32_t*)(ptr + j);
+                        x = *(uint32_t*)((char*)ptr + j);
                         if (swap) x = bswap_32(x);
                         *(uint32_t*)(buffer + j) = x;
                         len += fprintf(file, "%08x ", x);
@@ -191,7 +204,7 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
                     }
                     else
                     {
-                        x = *(uint64_t*)(ptr + j);
+                        x = *(uint64_t*)((char*)ptr + j);
                         if (swap) x = bswap_64(x);
                         *(uint64_t*)(buffer + j) = x;
                         len += fprintf(file, "%016llx ", (long long unsigned int)x);
@@ -205,7 +218,7 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
             len += fprintf(file, "%c", isprint(buffer[j]) ? buffer[j] : '.');
         }
         offset += 16;
-        ptr += 16;
+        ptr = (char*)ptr + 16;
         len += fprintf(file, "\n");
     }
 #ifdef HAVE_setjmp_and_signal
