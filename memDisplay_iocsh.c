@@ -3,19 +3,32 @@
 #include <stdio.h>
 #include <epicsTypes.h>
 #include <epicsString.h>
+#include <epicsVersion.h>
+
+#ifndef BASE_VERSION
+/* 3.14+ */
 #include <devLibVME.h>
 #include <iocsh.h>
+#else
+#define EPICS_3_13
+#endif
 
-/* comment this out if you dont have/want symbolname.h */
+#ifdef vxWorks
+#include <sysLib.h>
+#endif
+
+#ifdef WITH_SYMBOLNAME
 #include "symbolname.h"
+#endif
 
 #include "memDisplay.h"
 #include <epicsExport.h>
 
 static volatile void* VME_AddrHandler(size_t addr, size_t size, size_t addrSpace)
 {
-    static int first_time = 1;
     volatile void* ptr;
+#ifndef vxWorks
+    static int first_time = 1;
     if (!pdevLibVirtualOS) {
         printf("No VME support available.\n");
         return NULL;
@@ -26,8 +39,13 @@ static volatile void* VME_AddrHandler(size_t addr, size_t size, size_t addrSpace
         /* We want to map but not register and thus block the address space.*/
         devRegisterAddress(NULL, 0, 0, 0, NULL);
         first_time = 0;
-    }    
+    }
     return pdevLibVirtualOS->pDevMapAddr(addrSpace, 0, addr, size, &ptr) == S_dev_success ? ptr : NULL;
+#else
+    int status = sysBusToLocalAdrs((int)addrSpace, (char*)addr, (char**)&ptr);
+    return status == OK ? ptr : NULL;
+#endif
+    
 }
 
 struct addressHandlerMap {
@@ -59,47 +77,46 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
     volatile void* ptr;
     char* p;
 
-    if ((p = strchr(addrstr, ':')) != NULL)
+#ifdef vxWorks
+    if (addrstr < sysMemTop() && (size_t)addrstr >0x100000)
     {
-        struct addressHandlerMap* map;
-        addr = strtoul(p+1, NULL, 0) + offs;
-        for (map = addressHandlerList; map != NULL; map = map->next)
-        {
-            if (strlen(map->str) == p-addrstr &&
-                strncmp(addrstr, map->str, p-addrstr) == 0)
-            {
-                ptr = map->handler(addr, size, map->usr);
-                if (!ptr)
-                {
-                    printf("Invalid address in %s address space.\n", map->str);
-                    return (remote_addr_t){NULL, 0};
-                }
-                return (remote_addr_t){ptr, addr};
-            }
-        }
-        printf("Invalid address space %.*s.\n", (int)(p-addrstr), addrstr);
-        return (remote_addr_t){NULL, 0};
-    }
-#ifdef symbolname_h
-    addr = (size_t)(ptr = symbolAddr(addrstr) + offs);
 #endif
-    if (!addr) ptr = (volatile void*)(addr = strtoul(addrstr, NULL, 0) + offs);
+        if ((p = strchr(addrstr, ':')) != NULL)
+        {
+            struct addressHandlerMap* map;
+            addr = strtoul(p+1, NULL, 0) + offs;
+            for (map = addressHandlerList; map != NULL; map = map->next)
+            {
+                if (strlen(map->str) == p-addrstr &&
+                    strncmp(addrstr, map->str, p-addrstr) == 0)
+                {
+                    ptr = map->handler(addr, size, map->usr);
+                    if (!ptr)
+                    {
+                        printf("Invalid address in %s address space.\n", map->str);
+                        return (remote_addr_t){NULL, 0};
+                    }
+                    return (remote_addr_t){ptr, addr};
+                }
+            }
+            printf("Invalid address space %.*s.\n", (int)(p-addrstr), addrstr);
+            return (remote_addr_t){NULL, 0};
+        }
+#ifdef symbolname_h
+        addr = (size_t)(ptr = (char*)symbolAddr(addrstr) + offs);
+#endif
+        if (!addr) ptr = (volatile void*)(addr = strtoul(addrstr, NULL, 0) + offs);
+#ifdef vxWorks
+    }
+    if (!addr) return (remote_addr_t){(volatile void*)addrstr, (size_t)addrstr};
+#else
     if (!addr) printf("Invalid address %s.\n", addrstr);
+#endif
     return (remote_addr_t){ptr, addr};
 }
-    
-static const iocshFuncDef mdDef =
-    { "md", 3, (const iocshArg *[]) {
-    &(iocshArg) { "[addrspace:]address", iocshArgString },
-    &(iocshArg) { "[wordsize={1|2|4|8|-2|-4|-8}]", iocshArgInt },
-    &(iocshArg) { "[bytes]", iocshArgInt },
-}};
 
-static void mdFunc (const iocshArgBuf *args)
+void md(const char* addressStr, int wordsize, int bytes)
 {
-    const char* addressStr = args[0].sval;
-    int wordsize = args[1].ival;
-    int bytes = args[2].ival;
     remote_addr_t addr;
     static remote_addr_t old_addr = {0};
     static int old_wordsize = 2;
@@ -109,21 +126,25 @@ static void mdFunc (const iocshArgBuf *args)
  
     if (bytes == 0) bytes = old_bytes;
     if (wordsize == 0) wordsize = old_wordsize;
-    if ((!args[0].sval && !old_addr.ptr) || (args[0].sval && args[0].sval[0] == '?'))
+    if ((!addressStr && !old_addr.ptr) || (addressStr && addressStr[0] == '?'))
     {
         struct addressHandlerMap* map;
 
-        iocshCmd("help md");
+        printf("md \"[addrspace:]address\", [wordsize={1|2|4|8|-2|-4|-8}], [bytes]");
         printf("Installed address spaces:\n");
         for (map = addressHandlerList; map != NULL; map = map->next)
             printf("%s ", map->str);
         printf("\n");
         return;
     }
-    if (args[0].sval)
+    if (addressStr)
     {
+#ifdef vxWorks
+        old_addressStr = (char*)addressStr;
+#else
         free(old_addressStr);
         old_addressStr = epicsStrDup(addressStr);
+#endif
         old_offs = 0;
     }
     else
@@ -144,13 +165,26 @@ static void mdFunc (const iocshArgBuf *args)
     old_addr = addr;
 }
 
+#ifndef EPICS_3_13
+static const iocshFuncDef mdDef =
+    { "md", 3, (const iocshArg *[]) {
+    &(iocshArg) { "[addrspace:]address", iocshArgString },
+    &(iocshArg) { "[wordsize={1|2|4|8|-2|-4|-8}]", iocshArgInt },
+    &(iocshArg) { "[bytes]", iocshArgInt },
+}};
+
+static void mdFunc(const iocshArgBuf *args)
+{
+    md(args[0].sval, args[1].ival, args[2].ival);
+}
+    
 static const iocshFuncDef devReadProbeDef =
     { "devReadProbe", 2, (const iocshArg *[]) {
     &(iocshArg) { "wordsize={1|2|4|8}", iocshArgInt },
     &(iocshArg) { "[{A16|A24|A32|CRCSR}:]address", iocshArgString },
 }};
 
-static void devReadProbeFunc (const iocshArgBuf *args)
+static void devReadProbeFunc(const iocshArgBuf *args)
 {
     epicsUInt32 val = 0;
     remote_addr_t addr;
@@ -200,7 +234,7 @@ static const iocshFuncDef devWriteProbeDef =
     &(iocshArg) { "value", iocshArgInt },
 }};
 
-static void devWriteProbeFunc (const iocshArgBuf *args)
+static void devWriteProbeFunc(const iocshArgBuf *args)
 {
     epicsUInt32 val;
     remote_addr_t addr;
@@ -246,10 +280,12 @@ static void devWriteProbeFunc (const iocshArgBuf *args)
 
 static void memDisplayRegistrar(void)
 {
+#ifndef vxWorks
     memDisplayInstallAddrHandler("A16",   VME_AddrHandler, atVMEA16);
     memDisplayInstallAddrHandler("A24",   VME_AddrHandler, atVMEA24);
     memDisplayInstallAddrHandler("A32",   VME_AddrHandler, atVMEA32);
     memDisplayInstallAddrHandler("CRCSR", VME_AddrHandler, atVMECSR);
+#endif
 
     iocshRegister(&mdDef, mdFunc);
     iocshRegister(&devReadProbeDef, devReadProbeFunc);
@@ -257,3 +293,18 @@ static void memDisplayRegistrar(void)
 }
 
 epicsExportRegistrar(memDisplayRegistrar);
+#endif
+
+#ifdef vxWorks
+static void memDisplayInit() __attribute__((constructor));
+static void memDisplayInit()
+{
+    memDisplayInstallAddrHandler("A16",   VME_AddrHandler, VME_AM_SUP_SHORT_IO);
+    memDisplayInstallAddrHandler("A24",   VME_AddrHandler, VME_AM_STD_SUP_DATA);
+    memDisplayInstallAddrHandler("A32",   VME_AddrHandler, VME_AM_EXT_SUP_DATA);
+#ifdef VME_AM_CSR
+    memDisplayInstallAddrHandler("CRCSR", VME_AddrHandler, VME_AM_CSR);
+#endif
+}
+
+#endif
