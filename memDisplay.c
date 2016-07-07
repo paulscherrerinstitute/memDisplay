@@ -22,12 +22,21 @@
 #define bswap_64(x) _byteswap_uint64(x)
 #endif
 
+#ifdef HAVE_stdint
+#include <stdint.h>
+#else
+#define uint32_t unsigned int
+#define UINT64_C(c) c ## ULL
+#endif
+
+#ifdef HAVE_setjmp_and_signal
+#include <signal.h>
+#include <setjmp.h>
+#endif
+
 #ifdef HAVE_byteswap
 #include <byteswap.h>
 #else
-#ifndef UINT64_C
-#define UINT64_C(c) c ## ULL
-#endif
 
 #ifndef bswap_16
 #define bswap_16(x) ((((x) & 0x00ff) << 8) | (((x) & 0xff00) >> 8))
@@ -48,17 +57,6 @@
                    | (((x) & 0x000000000000ff00ull) << 40) \
                    | (((x) & 0x00000000000000ffull) << 56))
 #endif
-#endif
-
-#ifdef HAVE_stdint
-#include <stdint.h>
-#else
-#define uint32_t unsigned int
-#endif
-
-#ifdef HAVE_setjmp_and_signal
-#include <signal.h>
-#include <setjmp.h>
 #endif
 
 #include "memDisplay.h"
