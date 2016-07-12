@@ -93,13 +93,17 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
                     ptr = map->handler(addr, size, map->usr);
                     if (!ptr)
                     {
-                        printf("Invalid address in %s address space.\n", map->str);
-                        return (remote_addr_t){NULL, 0};
+                        fprintf(stderr, "Invalid address in %s address space.\n", map->str);
                     }
                     return (remote_addr_t){ptr, addr};
                 }
             }
-            printf("Invalid address space %.*s.\n", (int)(p-addrstr), addrstr);
+            fprintf(stderr, "Invalid address space %.*s.\n", (int)(p-addrstr), addrstr);
+            fprintf(stderr, "Available address spaces:\n");
+            for (map = addressHandlerList; map != NULL; map = map->next)
+                fprintf(stderr, "%s ", map->str);
+            fprintf(stderr, "\n");
+            return (remote_addr_t){NULL, 0};
             return (remote_addr_t){NULL, 0};
         }
 #ifdef WITH_SYMBOLNAME
@@ -131,7 +135,7 @@ void md(const char* addressStr, int wordsize, int bytes)
         struct addressHandlerMap* map;
 
         printf("md \"[addrspace:]address\", [wordsize={1|2|4|8|-2|-4|-8}], [bytes]");
-        printf("Installed address spaces:\n");
+        printf("Available address spaces:\n");
         for (map = addressHandlerList; map != NULL; map = map->next)
             printf("%s ", map->str);
         printf("\n");
