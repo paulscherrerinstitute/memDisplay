@@ -1,6 +1,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
 #include <epicsTypes.h>
 #include <epicsString.h>
 #include <epicsVersion.h>
@@ -15,6 +16,15 @@
 
 #ifdef vxWorks
 #include <sysLib.h>
+#endif
+
+/* the printf flag for size_t */
+#if defined __GNUC__ && __GNUC__ >= 3
+#define Z "z"
+#elif defined _WIN32
+#define Z "I"
+#else
+#define Z
 #endif
 
 #ifdef WITH_SYMBOLNAME
@@ -90,15 +100,21 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
                 if (strlen(map->str) == p-addrstr &&
                     strncmp(addrstr, map->str, p-addrstr) == 0)
                 {
+                    errno = 0;
                     ptr = map->handler(addr, size, map->usr);
                     if (!ptr)
                     {
-                        fprintf(stderr, "Invalid address in %s address space.\n", map->str);
+                        if (errno)
+                            fprintf(stderr, "Getting address 0x%"Z"x in %s address space failed: %s\n",
+                                addr, map->str, strerror(errno));
+                        else
+                            fprintf(stderr, "Getting address 0x%"Z"x in %s address space failed.\n",
+                                addr, map->str);
                     }
                     return (remote_addr_t){ptr, addr};
                 }
             }
-            fprintf(stderr, "Invalid address space %.*s.\n", (int)(p-addrstr), addrstr);
+            fprintf(stderr, "Unknown address space %.*s.\n", (int)(p-addrstr), addrstr);
             fprintf(stderr, "Available address spaces:\n");
             for (map = addressHandlerList; map != NULL; map = map->next)
                 fprintf(stderr, "%s ", map->str);
