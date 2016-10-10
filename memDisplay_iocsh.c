@@ -84,7 +84,7 @@ typedef struct {volatile void* ptr; size_t offs;} remote_addr_t;
 static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
 {
     size_t addr = 0;
-    volatile void* ptr;
+    volatile void* ptr = NULL;
     char* p;
 
 #ifdef vxWorks
