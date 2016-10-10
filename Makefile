@@ -15,6 +15,9 @@ LIB_SRCS += memDisplay.c
 LIB_SRCS += memDisplay_iocsh.c
 
 USR_CFLAGS_WIN = -nil-
+
+ifdef SYMBOLNAME
 USR_CFLAGS_DEFAULT+= -D WITH_SYMBOLNAME
+endif
 
 include $(TOP)/configure/RULES
