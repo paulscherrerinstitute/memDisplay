@@ -31,8 +31,8 @@
 #include "symbolname.h"
 #endif
 
-#include "memDisplay.h"
 #include <epicsExport.h>
+#include "memDisplay.h"
 
 epicsExportAddress(int, memDisplayDebug);
 
