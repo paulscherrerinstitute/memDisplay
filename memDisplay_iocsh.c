@@ -34,6 +34,8 @@
 #include "memDisplay.h"
 #include <epicsExport.h>
 
+epicsExportAddress(int, memDisplayDebug);
+
 static volatile void* VME_AddrHandler(size_t addr, size_t size, size_t addrSpace)
 {
     volatile void* ptr;

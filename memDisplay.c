@@ -53,6 +53,7 @@
 
 #include "memDisplay.h"
 
+int memDisplayDebug;
 
 int memDisplay(size_t base, volatile void* ptr, int wordsize, size_t bytes)
 {
@@ -88,16 +89,20 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
 
     unsigned char buffer[16];
     int swap = wordsize < 0;
+
+    if (memDisplayDebug)
+        fprintf(stderr, "fmemDisplay base=0x%llx ptr=%p wordsize=%d bytes=%llu\n",
+            (long long unsigned int)base, ptr, wordsize, (long long unsigned int)bytes);
+
     wordsize = abs(wordsize);
-    
+
     switch (wordsize)
     {
         case 8:
         case 4:
         case 2:
             /* align start */
-            base &= ~(size_t)(wordsize-1);
-            ptr = (volatile void*)((size_t)ptr & ~(size_t)(wordsize-1));
+            ptr = (volatile void*)((size_t)ptr - (base & (size_t)(wordsize-1)));
             base &= ~(size_t)(wordsize-1);
         case 1:
             break;
@@ -106,12 +111,20 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
             return -1;
     }
 
+    if (memDisplayDebug)
+        fprintf(stderr, "fmemDisplay adjusted base=0x%llx ptr=%p wordsize=%d\n",
+            (long long unsigned int)base, ptr, wordsize);
+
     /* round down start address to multiple of 16 */
     offset = base & ~15;
     size = bytes + (base & 15);
-    ptr = (void*)(((size_t)ptr) & ~15);
+    ptr = (void*)((size_t)ptr - (base & 15));
     memset(buffer, ' ', sizeof(buffer));
     
+    if (memDisplayDebug)
+        fprintf(stderr, "fmemDisplay round down base=0x%llx ptr=%p offset=%llu size=%llu\n",
+            (long long unsigned int)base, ptr, (long long unsigned int)offset, (long long unsigned int)size);
+
 #ifdef HAVE_setjmp_and_signal
     sa.sa_sigaction = memDisplaySigAction;
     sa.sa_flags = SA_SIGINFO;

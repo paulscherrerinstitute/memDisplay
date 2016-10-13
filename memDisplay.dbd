@@ -1,1 +1,2 @@
 registrar(memDisplayRegistrar)
+variable(memDisplayDebug, int)
