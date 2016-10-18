@@ -152,7 +152,7 @@ void md(const char* addressStr, int wordsize, int bytes)
     {
         struct addressHandlerMap* map;
 
-        printf("md \"[addrspace:]address\", [wordsize={1|2|4|8|-2|-4|-8}], [bytes]");
+        printf("md \"[addrspace:]address\", [wordsize={1|2|4|8|-2|-4|-8}], [bytes]\n");
         printf("Available address spaces:\n");
         for (map = addressHandlerList; map != NULL; map = map->next)
             printf("%s ", map->str);
