@@ -1,6 +1,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <stdlib.h>
 
 #ifdef __unix
 #define HAVE_byteswap
@@ -42,13 +43,17 @@
 #include <stdint.h>
 #else
 #define uint32_t unsigned int
-#define uint64_t unsigned long long int
+#define uint64_t unsigned long long
 #define UINT64_C(c) c ## ULL
 #endif
 
 #ifdef HAVE_setjmp_and_signal
 #include <signal.h>
 #include <setjmp.h>
+#endif
+
+#if !(XOPEN_SOURCE >= 600 || _BSD_SOURCE || _SVID_SOURCE || _ISOC99_SOURCE)
+#define strtoull strtoul
 #endif
 
 #include "memDisplay.h"
@@ -92,7 +97,7 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
 
     if (memDisplayDebug)
         fprintf(stderr, "fmemDisplay base=0x%llx ptr=%p wordsize=%d bytes=%llu\n",
-            (long long unsigned int)base, ptr, wordsize, (long long unsigned int)bytes);
+            (unsigned long long)base, ptr, wordsize, (unsigned long long)bytes);
 
     wordsize = abs(wordsize);
 
@@ -113,7 +118,7 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
 
     if (memDisplayDebug)
         fprintf(stderr, "fmemDisplay adjusted base=0x%llx ptr=%p wordsize=%d\n",
-            (long long unsigned int)base, ptr, wordsize);
+            (unsigned long long)base, ptr, wordsize);
 
     /* round down start address to multiple of 16 */
     offset = base & ~15;
@@ -123,7 +128,7 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
     
     if (memDisplayDebug)
         fprintf(stderr, "fmemDisplay round down base=0x%llx ptr=%p offset=%llu size=%llu\n",
-            (long long unsigned int)base, ptr, (long long unsigned int)offset, (long long unsigned int)size);
+            (unsigned long long)base, ptr, (unsigned long long)offset, (unsigned long long)size);
 
 #ifdef HAVE_setjmp_and_signal
     sa.sa_sigaction = memDisplaySigAction;
@@ -149,7 +154,7 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
 
     for (i = 0; i < size; i += 16)
     {   
-        len += fprintf(file, "%0*llx: ", addr_wordsize, (long long unsigned int)offset);
+        len += fprintf(file, "%0*llx: ", addr_wordsize, (unsigned long long)offset);
         switch (wordsize)
         {
             case 1:
@@ -215,7 +220,7 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
                         x = *(uint64_t*)((char*)ptr + j);
                         if (swap) x = bswap_64(x);
                         *(uint64_t*)(buffer + j) = x;
-                        len += fprintf(file, "%016llx ", (long long unsigned int)x);
+                        len += fprintf(file, "%016llx ", (unsigned long long)x);
                     }
                 }
                 break;
@@ -233,4 +238,72 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
     sigaction(SIGNAL, &oldsa, NULL);
 #endif /* HAVE_setjmp_and_signal */
     return (int)len;
+}
+
+unsigned long long strToSize(const char* str, char** endptr)
+{
+    char* p = (char*)str;
+    unsigned long long size = 0, n;
+
+    if (endptr) *endptr = p;
+    if (!str) return 0;
+    while (1)
+    {
+        n = strtoull(p, &p, 0);
+        switch (*p)
+        {
+            case 'e':
+            case 'E':
+                size += n <<= 60; break;
+            case 'p':
+            case 'P':
+                size += n <<= 50; break;
+            case 't':
+            case 'T':
+                size += n <<= 40; break;
+            case 'g':
+            case 'G':
+                size += n <<= 30; break;
+            case 'm':
+            case 'M':
+                size += n <<= 20; break;
+            case 'k':
+            case 'K':
+                size += n << 10; break;
+            default:
+                size += n;
+                if (endptr) *endptr = p;
+                return size;
+        }
+        p++;
+    }
+}
+
+char* sizeToStr(unsigned long long size, char* str)
+{
+    int l;
+
+    l = sprintf(str, "0x%llx", size);
+    l += sprintf(str+l, "=");
+    if (size >= 1ULL<<60)
+        l += sprintf(str+l, "%lluE", size>>50);
+    size &= (1ULL<<60)-1;
+    if (size >= 1ULL<<50)
+        l += sprintf(str+l, "%lluP", size>>40);
+    size &= (1ULL<<50)-1;
+    if (size >= 1ULL<<40)
+        l += sprintf(str+l, "%lluT", size>>30);
+    size &= (1ULL<<40)-1;
+    if (size >= 1UL<<30)
+        l += sprintf(str+l, "%lluG", size>>30);
+    size &= (1UL<<30)-1;
+    if (size >= 1UL<<20)
+        l += sprintf(str+l, "%lluM", size>>20);
+    size &= (1UL<<20)-1;
+    if (size >= 1UL<<10)
+        l += sprintf(str+l, "%lluK", size>>10);
+    size &= (1UL<<10)-1;
+    if (size > 0)
+        l += sprintf(str+l, "%llu", size);
+    return str;
 }

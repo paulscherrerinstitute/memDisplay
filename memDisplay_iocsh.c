@@ -18,13 +18,9 @@
 #include <sysLib.h>
 #endif
 
-/* the printf flag for size_t */
-#if defined __GNUC__ && __GNUC__ >= 3
-#define Z "z"
-#elif defined _WIN32
-#define Z "I"
-#else
-#define Z
+
+#if !(XOPEN_SOURCE >= 600 || _BSD_SOURCE || _SVID_SOURCE || _ISOC99_SOURCE)
+#define strtoull strtoul
 #endif
 
 #ifdef WITH_SYMBOLNAME
@@ -85,56 +81,78 @@ void memDisplayInstallAddrHandler(const char* str, memDisplayAddrHandler handler
 typedef struct {volatile void* ptr; size_t offs;} remote_addr_t;
 static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
 {
-    size_t addr = 0;
-    volatile void* ptr = NULL;
+    unsigned long long addr = 0, len;
+    volatile char* ptr = NULL;
+    struct addressHandlerMap* map;
     char* p;
 
 #ifdef vxWorks
-    if (addrstr < sysMemTop() && (size_t)addrstr >0x100000)
+    if (addrstr >= sysMemTop() || (size_t)addrstr < 0x100000)
     {
 #endif
         if ((p = strchr(addrstr, ':')) != NULL)
         {
-            struct addressHandlerMap* map;
-            addr = strtoul(p+1, NULL, 0) + offs;
-            for (map = addressHandlerList; map != NULL; map = map->next)
+            len = p-addrstr;
+            addr = strToSize(p+1, &p) + offs;
+            if (*p != 0)
             {
-                if (strlen(map->str) == p-addrstr &&
-                    strncmp(addrstr, map->str, p-addrstr) == 0)
-                {
-                    errno = 0;
-                    ptr = map->handler(addr, size, map->usr);
-                    if (!ptr)
-                    {
-                        if (errno)
-                            fprintf(stderr, "Getting address 0x%"Z"x in %s address space failed: %s\n",
-                                addr, map->str, strerror(errno));
-                        else
-                            fprintf(stderr, "Getting address 0x%"Z"x in %s address space failed.\n",
-                                addr, map->str);
-                    }
-                    return (remote_addr_t){ptr, addr};
-                }
+                printf("Invalid offset %s.\n", addrstr);
+                return (remote_addr_t){NULL, 0};
             }
-            fprintf(stderr, "Unknown address space %.*s.\n", (int)(p-addrstr), addrstr);
+        }
+        else
+        {
+            len = strlen(addrstr);
+            addr = strToSize(addrstr, &p) + offs;
+        }
+        if (*p == 0)
+        {
+            if (addr & ~(unsigned long long)((size_t)-1))
+            {
+                printf("Too large address %s.\n", addrstr);
+                return (remote_addr_t){NULL, 0};
+            }
+            return (remote_addr_t){(volatile void*)(size_t)(addr + offs), addr + offs};
+        }
+        for (map = addressHandlerList; map != NULL; map = map->next)
+        {
+            if (strlen(map->str) == len && /* compare up to the : */
+                strncmp(addrstr, map->str, len) == 0)
+            {
+                errno = 0;
+                ptr = map->handler(addr, size, map->usr);
+                if (!ptr)
+                {
+                    if (errno)
+                        fprintf(stderr, "Getting address 0x%llx in %s address space failed: %s\n",
+                            addr, map->str, strerror(errno));
+                    else
+                        fprintf(stderr, "Getting address 0x%llx in %s address space failed.\n",
+                            addr, map->str);
+                }
+                return (remote_addr_t){ptr, addr};
+            }
+        }
+#ifdef WITH_SYMBOLNAME
+        if ((ptr = symbolAddr(addrstr)) != NULL)
+            return (remote_addr_t){ptr + offs, (size_t)ptr + offs};
+#endif
+        if (addr == 0)
+        {
+            fprintf(stderr, "Unknown address space %.*s.\n", (int)(len), addrstr);
             fprintf(stderr, "Available address spaces:\n");
             for (map = addressHandlerList; map != NULL; map = map->next)
                 fprintf(stderr, "%s ", map->str);
             fprintf(stderr, "\n");
             return (remote_addr_t){NULL, 0};
-            return (remote_addr_t){NULL, 0};
         }
-#ifdef WITH_SYMBOLNAME
-        addr = (size_t)(ptr = (char*)symbolAddr(addrstr) + offs);
-#endif
-        if (!addr) ptr = (volatile void*)(addr = strtoul(addrstr, NULL, 0) + offs);
 #ifdef vxWorks
     }
     if (!addr) return (remote_addr_t){(volatile void*)addrstr, (size_t)addrstr};
 #else
-    if (!addr) printf("Invalid address %s.\n", addrstr);
+    printf("Invalid address %s.\n", addrstr);
 #endif
-    return (remote_addr_t){ptr, addr};
+    return (remote_addr_t){NULL, 0};
 }
 
 void md(const char* addressStr, int wordsize, int bytes)
