@@ -81,10 +81,11 @@ void memDisplayInstallAddrHandler(const char* str, memDisplayAddrHandler handler
 typedef struct {volatile void* ptr; size_t offs;} remote_addr_t;
 static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
 {
-    unsigned long long addr = 0, len;
+    unsigned long long addr = 0;
+    size_t len;
     volatile char* ptr = NULL;
     struct addressHandlerMap* map;
-    char* p;
+    char *p, *q;
 
 #ifdef vxWorks
     if (addrstr >= sysMemTop() || (size_t)addrstr < 0x100000)
@@ -92,28 +93,33 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
 #endif
         if ((p = strchr(addrstr, ':')) != NULL)
         {
+            /* aspace and address */
             len = p-addrstr;
-            addr = strToSize(p+1, &p) + offs;
-            if (*p != 0)
-            {
-                printf("Invalid offset %s.\n", addrstr);
-                return (remote_addr_t){NULL, 0};
-            }
+            p++;
         }
         else
         {
+            /* no space or no address */
             len = strlen(addrstr);
-            addr = strToSize(addrstr, &p) + offs;
+            p = (char*)addrstr;
         }
-        if (*p == 0)
+        addr = strToSize(p, &q) + offs;
+        if (q > addrstr)
         {
-            if (addr & ~(unsigned long long)((size_t)-1))
+            /* something like a number */
+            if (*q != 0)
             {
-                printf("Too large address %s.\n", addrstr);
+                /* rubbish at end */
+                printf("Invalid address %s.\n", addrstr);
                 return (remote_addr_t){NULL, 0};
             }
-            return (remote_addr_t){(volatile void*)(size_t)(addr + offs), addr + offs};
+            if (addr & ~(unsigned long long)((size_t)-1))
+            {
+                printf("Too large address %s for %u bit.\n", addrstr, (int) sizeof(void*)*8);
+                return (remote_addr_t){NULL, 0};
+            }
         }
+        printf("aspace=%.*s addr=0x%llx\n", (int)len, addrstr, addr);
         for (map = addressHandlerList; map != NULL; map = map->next)
         {
             if (strlen(map->str) == len && /* compare up to the : */
@@ -130,28 +136,33 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
                         fprintf(stderr, "Getting address 0x%llx in %s address space failed.\n",
                             addr, map->str);
                 }
+                printf("found ptr=%p\n", ptr);
                 return (remote_addr_t){ptr, addr};
             }
         }
+        /* no aspace */
 #ifdef WITH_SYMBOLNAME
-        if ((ptr = symbolAddr(addrstr)) != NULL)
-            return (remote_addr_t){ptr + offs, (size_t)ptr + offs};
-#endif
-        if (addr == 0)
+        if (!addr && (ptr = symbolAddr(addrstr)) != NULL)
         {
-            fprintf(stderr, "Unknown address space %.*s.\n", (int)(len), addrstr);
-            fprintf(stderr, "Available address spaces:\n");
-            for (map = addressHandlerList; map != NULL; map = map->next)
-                fprintf(stderr, "%s ", map->str);
-            fprintf(stderr, "\n");
-            return (remote_addr_t){NULL, 0};
+            /* global variable name */
+            return (remote_addr_t){ptr + offs, (size_t)ptr + offs};
+        }
+#endif
+        if (p == addrstr && q > p)
+        {
+            printf("number only, addr=0x%llx\n", addr);
+            /* number only */
+            return (remote_addr_t){(void*)(size_t) addr, addr};
         }
 #ifdef vxWorks
     }
     if (!addr) return (remote_addr_t){(volatile void*)addrstr, (size_t)addrstr};
-#else
-    printf("Invalid address %s.\n", addrstr);
 #endif
+    fprintf(stderr, "Unknown address space %.*s.\n", (int)(len), addrstr);
+    fprintf(stderr, "Available address spaces:\n");
+    for (map = addressHandlerList; map != NULL; map = map->next)
+        fprintf(stderr, "%s ", map->str);
+    fprintf(stderr, "\n");
     return (remote_addr_t){NULL, 0};
 }
 
@@ -164,8 +175,6 @@ void md(const char* addressStr, int wordsize, int bytes)
     static char* old_addressStr;
     static size_t old_offs;
  
-    if (bytes == 0) bytes = old_bytes;
-    if (wordsize == 0) wordsize = old_wordsize;
     if ((!addressStr && !old_addr.ptr) || (addressStr && addressStr[0] == '?'))
     {
         struct addressHandlerMap* map;
@@ -186,11 +195,14 @@ void md(const char* addressStr, int wordsize, int bytes)
         old_addressStr = epicsStrDup(addressStr);
 #endif
         old_offs = 0;
+        old_wordsize = 2;
     }
     else
     {
         addressStr = old_addressStr;
     }
+    if (bytes == 0) bytes = old_bytes;
+    if (wordsize == 0) wordsize = old_wordsize;
     addr = stringToAddr(addressStr, old_offs, bytes);
     if (!addr.ptr)
         return;
