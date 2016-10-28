@@ -119,7 +119,6 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
                 return (remote_addr_t){NULL, 0};
             }
         }
-        printf("aspace=%.*s addr=0x%llx\n", (int)len, addrstr, addr);
         for (map = addressHandlerList; map != NULL; map = map->next)
         {
             if (strlen(map->str) == len && /* compare up to the : */
@@ -136,7 +135,6 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
                         fprintf(stderr, "Getting address 0x%llx in %s address space failed.\n",
                             addr, map->str);
                 }
-                printf("found ptr=%p\n", ptr);
                 return (remote_addr_t){ptr, addr};
             }
         }
@@ -150,7 +148,6 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
 #endif
         if (p == addrstr && q > p)
         {
-            printf("number only, addr=0x%llx\n", addr);
             /* number only */
             return (remote_addr_t){(void*)(size_t) addr, addr};
         }
