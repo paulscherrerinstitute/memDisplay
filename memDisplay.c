@@ -242,40 +242,45 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
 
 unsigned long long strToSize(const char* str, char** endptr)
 {
-    char* p = (char*)str;
+    char* p = (char*)str, *q;
     unsigned long long size = 0, n;
 
     if (endptr) *endptr = p;
     if (!str) return 0;
     while (1)
     {
-        n = strtoull(p, &p, 0);
-        switch (*p)
+        n = strtoull(p, &q, 0);
+        if (p == q)
+        {
+            size += n;
+            if (endptr) *endptr = p;
+            return size;
+        }
+        switch (*(p = q))
         {
             case 'e':
             case 'E':
-                size += n <<= 60; break;
+                n <<= 60; break;
             case 'p':
             case 'P':
-                size += n <<= 50; break;
+                n <<= 50; break;
             case 't':
             case 'T':
-                size += n <<= 40; break;
+                n <<= 40; break;
             case 'g':
             case 'G':
-                size += n <<= 30; break;
+                n <<= 30; break;
             case 'm':
             case 'M':
-                size += n <<= 20; break;
+                n <<= 20; break;
             case 'k':
             case 'K':
-                size += n << 10; break;
+                n <<= 10; break;
             default:
-                size += n;
-                if (endptr) *endptr = p;
-                return size;
+                p--;
         }
         p++;
+        size += n;
     }
 }
 
