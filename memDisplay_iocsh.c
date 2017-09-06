@@ -91,39 +91,27 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
     if (addrstr >= sysMemTop() || (size_t)addrstr < 0x100000)
     {
 #endif
-        if ((p = strchr(addrstr, ':')) != NULL)
-        {
-            /* aspace and address */
-            len = p-addrstr;
-            p++;
-        }
-        else
-        {
-            /* no space or no address */
-            len = strlen(addrstr);
-            p = (char*)addrstr;
-        }
-        addr = strToSize(p, &q) + offs;
-        if (q > addrstr)
-        {
-            /* something like a number */
-            if (*q != 0)
-            {
-                /* rubbish at end */
-                printf("Invalid address %s.\n", addrstr);
-                return (remote_addr_t){NULL, 0};
-            }
-            if (addr & ~(unsigned long long)((size_t)-1))
-            {
-                printf("Too large address %s for %u bit.\n", addrstr, (int) sizeof(void*)*8);
-                return (remote_addr_t){NULL, 0};
-            }
-        }
         for (map = addressHandlerList; map != NULL; map = map->next)
         {
-            if (strlen(map->str) == len && /* compare up to the : */
-                strncmp(addrstr, map->str, len) == 0)
+            len = strlen(map->str);
+            if (strncmp(addrstr, map->str, len) == 0 &&
+                (addrstr[len] == 0 || addrstr[len] == ':'))
             {
+                if (addrstr[len])
+                {
+                    addr = strToSize(addrstr+len+1, &q) + offs;
+                    if (*q != 0)
+                    {
+                        /* rubbish at end */
+                        printf("Invalid address %s.\n", addrstr);
+                        return (remote_addr_t){NULL, 0};
+                    }
+                    if (addr & ~(unsigned long long)((size_t)-1))
+                    {
+                        printf("Too large address %s for %u bit.\n", addrstr, (int) sizeof(void*)*8);
+                        return (remote_addr_t){NULL, 0};
+                    }
+                }
                 errno = 0;
                 ptr = map->handler(addr, size, map->usr);
                 if (!ptr)
@@ -146,16 +134,28 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
             return (remote_addr_t){ptr + offs, (size_t)ptr + offs};
         }
 #endif
-        if (p == addrstr && q > p)
+        addr = strToSize(addrstr, &q) + offs;
+        if (q > addrstr)
         {
-            /* number only */
+            /* something like a number */
+            if (*q != 0)
+            {
+                /* rubbish at end */
+                printf("Invalid address %s.\n", addrstr);
+                return (remote_addr_t){NULL, 0};
+            }
+            if (addr & ~(unsigned long long)((size_t)-1))
+            {
+                printf("Too large address %s for %u bit.\n", addrstr, (int) sizeof(void*)*8);
+                return (remote_addr_t){NULL, 0};
+            }
             return (remote_addr_t){(void*)(size_t) addr, addr};
         }
 #ifdef vxWorks
     }
     if (!addr) return (remote_addr_t){(volatile void*)addrstr, (size_t)addrstr};
 #endif
-    fprintf(stderr, "Unknown address space %.*s.\n", (int)(len), addrstr);
+    fprintf(stderr, "Unknown address %s\n", addrstr);
     fprintf(stderr, "Available address spaces:\n");
     for (map = addressHandlerList; map != NULL; map = map->next)
         fprintf(stderr, "%s ", map->str);
