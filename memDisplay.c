@@ -71,9 +71,9 @@ static jmp_buf memDisplayFail;
 static void memDisplaySigAction(int sig, siginfo_t *info, void *ctx)
 {
 #ifdef si_addr
-    fprintf(stdout, "\nInvalid address %p.\n", info->si_addr);
+    fprintf(stdout, "\nNothing at address %p.\n", info->si_addr);
 #else
-    fprintf(stdout, "\nInvalid address\n");
+    fprintf(stdout, "\nNothing at requested address\n");
 #endif
     longjmp(memDisplayFail, 1);
 }
