@@ -56,26 +56,44 @@ static volatile void* VME_AddrHandler(size_t addr, size_t size, size_t addrSpace
     
 }
 
-struct addressHandlerMap {
+struct addressHandlerItem {
     const char* str;
     memDisplayAddrHandler handler;
     size_t usr;
-    struct addressHandlerMap* next;
+    struct addressHandlerItem* next;
 } *addressHandlerList = NULL;
 
 void memDisplayInstallAddrHandler(const char* str, memDisplayAddrHandler handler, size_t usr)
 {
-    struct addressHandlerMap* map = malloc(sizeof(struct addressHandlerMap));
-    if (!map)
+    struct addressHandlerItem* item = malloc(sizeof(struct addressHandlerItem));
+    if (!item)
     {
         printf("Out of memory.\n");
         return;
     }
-    map->str = epicsStrDup(str);
-    map->handler = handler;
-    map->usr = usr;
-    map->next = addressHandlerList;
-    addressHandlerList = map;       
+    item->str = epicsStrDup(str);
+    item->handler = handler;
+    item->usr = usr;
+    item->next = addressHandlerList;
+    addressHandlerList = item;       
+}
+
+struct addressTranslatorItem {
+    memDisplayAddrTranslator translator;
+    struct addressTranslatorItem* next;
+} *addressTranslatorList = NULL;
+
+void memDisplayInstallAddrTranslator(memDisplayAddrTranslator translator)
+{
+    struct addressTranslatorItem* item = malloc(sizeof(struct addressTranslatorItem));
+    if (!item)
+    {
+        printf("Out of memory.\n");
+        return;
+    }
+    item->translator = translator;
+    item->next = addressTranslatorList;
+    addressTranslatorList = item;       
 }
 
 typedef struct {volatile void* ptr; size_t offs;} remote_addr_t;
@@ -84,17 +102,18 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
     unsigned long long addr = 0;
     size_t len;
     volatile char* ptr = NULL;
-    struct addressHandlerMap* map;
+    struct addressHandlerItem* hitem;
+    struct addressTranslatorItem* titem;
     char *p, *q;
 
 #ifdef vxWorks
     if (addrstr >= sysMemTop() || (size_t)addrstr < 0x100000)
     {
 #endif
-        for (map = addressHandlerList; map != NULL; map = map->next)
+        for (hitem = addressHandlerList; hitem != NULL; hitem = hitem->next)
         {
-            len = strlen(map->str);
-            if (strncmp(addrstr, map->str, len) == 0 &&
+            len = strlen(hitem->str);
+            if (strncmp(addrstr, hitem->str, len) == 0 &&
                 (addrstr[len] == 0 || addrstr[len] == ':'))
             {
                 if (addrstr[len])
@@ -113,19 +132,29 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
                     }
                 }
                 errno = 0;
-                ptr = map->handler(addr, size, map->usr);
+                ptr = hitem->handler(addr, size, hitem->usr);
                 if (!ptr)
                 {
                     if (errno)
                         fprintf(stderr, "Getting address 0x%llx in %s address space failed: %s\n",
-                            addr, map->str, strerror(errno));
+                            addr, hitem->str, strerror(errno));
                     else
                         fprintf(stderr, "Getting address 0x%llx in %s address space failed.\n",
-                            addr, map->str);
+                            addr, hitem->str);
                 }
                 return (remote_addr_t){ptr, addr};
             }
         }
+        for (titem = addressTranslatorList; titem != NULL; titem = titem->next)
+        {
+            if ((p = strrchr(addrstr, ':')) != NULL)
+            {
+                addr = strToSize(p+1, &q);
+            }
+            ptr = titem->translator(addrstr, offs, size);
+            if (ptr) return (remote_addr_t){ptr, addr + offs};
+        }
+        
         /* no aspace */
 #ifdef WITH_SYMBOLNAME
         if (!addr && (ptr = symbolAddr(addrstr)) != NULL)
@@ -156,10 +185,6 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
     if (!addr) return (remote_addr_t){(volatile void*)addrstr, (size_t)addrstr};
 #endif
     fprintf(stderr, "Unknown address %s\n", addrstr);
-    fprintf(stderr, "Available address spaces:\n");
-    for (map = addressHandlerList; map != NULL; map = map->next)
-        fprintf(stderr, "%s ", map->str);
-    fprintf(stderr, "\n");
     return (remote_addr_t){NULL, 0};
 }
 
@@ -174,13 +199,7 @@ void md(const char* addressStr, int wordsize, int bytes)
  
     if ((!addressStr && !old_addr.ptr) || (addressStr && addressStr[0] == '?'))
     {
-        struct addressHandlerMap* map;
-
         printf("md \"[addrspace:]address\", [wordsize={1|2|4|8|-2|-4|-8}], [bytes]\n");
-        printf("Available address spaces:\n");
-        for (map = addressHandlerList; map != NULL; map = map->next)
-            printf("%s ", map->str);
-        printf("\n");
         return;
     }
     if (addressStr)
