@@ -254,7 +254,7 @@ static const iocshFuncDef devReadProbeDef =
 
 static void devReadProbeFunc(const iocshArgBuf *args)
 {
-    epicsUInt32 val = 0;
+    union {epicsUInt8 u8; epicsUInt16 u16; epicsUInt32 u32;} val;
     remote_addr_t addr;
     int wordsize = args[0].ival;
     const char* address = args[1].sval;
@@ -281,13 +281,13 @@ static void devReadProbeFunc(const iocshArgBuf *args)
             switch (wordsize)
             {
                 case 1:
-                    printf("%#x\n", *(epicsUInt8*)&val);
+                    printf("%#x\n", val.u8);
                     break;
                 case 2:
-                    printf("%#x\n", *(epicsUInt16*)&val);
+                    printf("%#x\n", val.u16);
                     break;
                 default:
-                    printf("%#x\n", val);
+                    printf("%#x\n", val.u32);
             }
             break;
         default:
@@ -304,7 +304,7 @@ static const iocshFuncDef devWriteProbeDef =
 
 static void devWriteProbeFunc(const iocshArgBuf *args)
 {
-    epicsUInt32 val;
+    union {epicsUInt8 u8; epicsUInt16 u16; epicsUInt32 u32;} val;
     remote_addr_t addr;
     int wordsize = args[0].ival;
     const char* address = args[1].sval;
@@ -319,13 +319,13 @@ static void devWriteProbeFunc(const iocshArgBuf *args)
     switch (wordsize)
     {
         case 1:
-            *(epicsUInt8*)&val = args[2].ival;
+            val.u8 = args[2].ival;
             break;
         case 2:
-            *(epicsUInt16*)&val = args[2].ival;
+            val.u16 = args[2].ival;
             break;
         default:
-            val = args[2].ival;
+            val.u32 = args[2].ival;
     }
     switch (devWriteProbe(wordsize, addr.ptr, &val))
     {
