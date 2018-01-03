@@ -8,6 +8,7 @@
 
 #ifndef BASE_VERSION
 /* 3.14+ */
+#include <epicsStdioRedirect.h>
 #include <devLibVME.h>
 #include <iocsh.h>
 #else

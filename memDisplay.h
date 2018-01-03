@@ -18,6 +18,7 @@ epicsShareExtern int memDisplayDebug;
 
 epicsShareFunc int memDisplay(size_t base, volatile void* ptr, int wordsize, size_t bytes);
 epicsShareFunc int fmemDisplay(FILE* outfile, size_t base, volatile void* ptr, int wordsize, size_t bytes);
+#define memDisplay(base, ptr, wordsize, bytes) fmemDisplay(stdout, base, ptr, wordsize, bytes)
 
 typedef volatile void* (*memDisplayAddrHandler) (size_t addr, size_t size, size_t usr);
 epicsShareFunc void memDisplayInstallAddrHandler(const char* str, memDisplayAddrHandler handler, size_t usr);

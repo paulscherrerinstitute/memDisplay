@@ -52,6 +52,7 @@
 #endif
 
 #include "memDisplay.h"
+#undef memDisplay
 
 int memDisplayDebug;
 
