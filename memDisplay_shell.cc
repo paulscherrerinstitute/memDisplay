@@ -36,7 +36,7 @@ epicsExportAddress(int, memDisplayDebug);
 static volatile void* VME_AddrHandler(size_t addr, size_t size, size_t addrSpace)
 {
     volatile void* ptr;
-#ifndef vxWorks
+#ifndef EPICS_3_13
     static int first_time = 1;
     if (!pdevLibVirtualOS) {
         printf("No VME support available.\n");
@@ -46,10 +46,10 @@ static volatile void* VME_AddrHandler(size_t addr, size_t size, size_t addrSpace
     {
         /* Make sure that devLibInit has been called (call will fail) */
         /* We want to map but not register and thus block the address space.*/
-        devRegisterAddress(NULL, 0, 0, 0, NULL);
+        devRegisterAddress(NULL, (epicsAddressType)0, 0, 0, NULL);
         first_time = 0;
     }
-    return pdevLibVirtualOS->pDevMapAddr(addrSpace, 0, addr, size, &ptr) == S_dev_success ? ptr : NULL;
+    return pdevLibVirtualOS->pDevMapAddr((epicsAddressType)addrSpace, 0, addr, size, &ptr) == S_dev_success ? ptr : NULL;
 #else
     int status = sysBusToLocalAdrs((int)addrSpace, (char*)addr, (char**)&ptr);
     return status == OK ? ptr : NULL;
@@ -66,7 +66,8 @@ struct addressHandlerItem {
 
 void memDisplayInstallAddrHandler(const char* str, memDisplayAddrHandler handler, size_t usr)
 {
-    struct addressHandlerItem* item = malloc(sizeof(struct addressHandlerItem));
+    struct addressHandlerItem* item =
+        (struct addressHandlerItem*) malloc(sizeof(struct addressHandlerItem));
     if (!item)
     {
         printf("Out of memory.\n");
@@ -86,7 +87,8 @@ struct addressTranslatorItem {
 
 void memDisplayInstallAddrTranslator(memDisplayAddrTranslator translator)
 {
-    struct addressTranslatorItem* item = malloc(sizeof(struct addressTranslatorItem));
+    struct addressTranslatorItem* item =
+        (struct addressTranslatorItem*) malloc(sizeof(struct addressTranslatorItem));
     if (!item)
     {
         printf("Out of memory.\n");
@@ -102,94 +104,86 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
 {
     unsigned long long addr = 0;
     size_t len;
-    volatile char* ptr = NULL;
+    volatile void* ptr = NULL;
     struct addressHandlerItem* hitem;
     struct addressTranslatorItem* titem;
     char *p, *q;
 
-#ifdef vxWorks
-    if (addrstr >= sysMemTop() || (size_t)addrstr < 0x100000)
+    for (hitem = addressHandlerList; hitem != NULL; hitem = hitem->next)
     {
-#endif
-        for (hitem = addressHandlerList; hitem != NULL; hitem = hitem->next)
+        len = strlen(hitem->str);
+        if (strncmp(addrstr, hitem->str, len) == 0 &&
+            (addrstr[len] == 0 || addrstr[len] == ':'))
         {
-            len = strlen(hitem->str);
-            if (strncmp(addrstr, hitem->str, len) == 0 &&
-                (addrstr[len] == 0 || addrstr[len] == ':'))
+            if (addrstr[len])
             {
-                if (addrstr[len])
+                addr = strToSize(addrstr+len+1, &q) + offs;
+                if (*q != 0)
                 {
-                    addr = strToSize(addrstr+len+1, &q) + offs;
-                    if (*q != 0)
-                    {
-                        /* rubbish at end */
-                        printf("Invalid address %s.\n", addrstr);
-                        return (remote_addr_t){NULL, 0};
-                    }
-                    if (addr & ~(unsigned long long)((size_t)-1))
-                    {
-                        printf("Too large address %s for %u bit.\n", addrstr, (int) sizeof(void*)*8);
-                        return (remote_addr_t){NULL, 0};
-                    }
+                    /* rubbish at end */
+                    printf("Invalid address %s.\n", addrstr);
+                    return (remote_addr_t){NULL, 0};
                 }
-                errno = 0;
-                ptr = hitem->handler(addr, size, hitem->usr);
-                if (!ptr)
+                if (addr & ~(unsigned long long)((size_t)-1))
                 {
-                    if (errno)
-                        fprintf(stderr, "Getting address 0x%llx in %s address space failed: %s\n",
-                            addr, hitem->str, strerror(errno));
-                    else
-                        fprintf(stderr, "Getting address 0x%llx in %s address space failed.\n",
-                            addr, hitem->str);
+                    printf("Too large address %s for %u bit.\n", addrstr, (int) sizeof(void*)*8);
+                    return (remote_addr_t){NULL, 0};
                 }
-                return (remote_addr_t){ptr, addr};
             }
-        }
-        for (titem = addressTranslatorList; titem != NULL; titem = titem->next)
-        {
-            if ((p = strrchr(addrstr, ':')) != NULL)
+            errno = 0;
+            ptr = hitem->handler(addr, size, hitem->usr);
+            if (!ptr)
             {
-                addr = strToSize(p+1, &q);
+                if (errno)
+                    fprintf(stderr, "Getting address 0x%llx in %s address space failed: %s\n",
+                        addr, hitem->str, strerror(errno));
+                else
+                    fprintf(stderr, "Getting address 0x%llx in %s address space failed.\n",
+                        addr, hitem->str);
             }
-            ptr = titem->translator(addrstr, offs, size);
-            if (ptr) return (remote_addr_t){ptr, addr + offs};
+            return (remote_addr_t){ptr, addr};
         }
-        
-        /* no aspace */
-#ifdef WITH_SYMBOLNAME
-        if (!addr && (ptr = symbolAddr(addrstr)) != NULL)
-        {
-            /* global variable name */
-            return (remote_addr_t){ptr + offs, (size_t)ptr + offs};
-        }
-#endif
-        addr = strToSize(addrstr, &q) + offs;
-        if (q > addrstr)
-        {
-            /* something like a number */
-            if (*q != 0)
-            {
-                /* rubbish at end */
-                printf("Invalid address %s.\n", addrstr);
-                return (remote_addr_t){NULL, 0};
-            }
-            if (addr & ~(unsigned long long)((size_t)-1))
-            {
-                printf("Too large address %s for %u bit.\n", addrstr, (int) sizeof(void*)*8);
-                return (remote_addr_t){NULL, 0};
-            }
-            return (remote_addr_t){(void*)(size_t) addr, addr};
-        }
-#ifdef vxWorks
     }
-    if (!addr) return (remote_addr_t){(volatile void*)addrstr, (size_t)addrstr};
+    for (titem = addressTranslatorList; titem != NULL; titem = titem->next)
+    {
+        if ((p = strrchr((char*)addrstr, ':')) != NULL)
+        {
+            addr = strToSize(p+1, &q);
+        }
+        ptr = titem->translator(addrstr, offs, size);
+        if (ptr) return (remote_addr_t){ptr, addr + offs};
+    }
+
+    /* no aspace */
+#ifdef WITH_SYMBOLNAME
+    if (!addr && (ptr = symbolAddr(addrstr)) != NULL)
+    {
+        /* global variable name */
+        return (remote_addr_t){ptr + offs, (size_t)ptr + offs};
+    }
 #endif
+    addr = strToSize(addrstr, &q) + offs;
+    if (q > addrstr)
+    {
+        /* something like a number */
+        if (*q != 0)
+        {
+            /* rubbish at end */
+            printf("Invalid address %s.\n", addrstr);
+            return (remote_addr_t){NULL, 0};
+        }
+        if (addr & ~(unsigned long long)((size_t)-1))
+        {
+            printf("Too large address %s for %u bit.\n", addrstr, (int) sizeof(void*)*8);
+            return (remote_addr_t){NULL, 0};
+        }
+        return (remote_addr_t){(void*)(size_t) addr, addr};
+    }
     fprintf(stderr, "Unknown address %s\n", addrstr);
     return (remote_addr_t){NULL, 0};
 }
 
-void md(const char* addressStr, int wordsize, int bytes)
+extern "C" void md(const char* addressStr, int wordsize, int bytes)
 {
     remote_addr_t addr;
     static remote_addr_t old_addr = {0};
@@ -235,23 +229,21 @@ void md(const char* addressStr, int wordsize, int bytes)
 }
 
 #ifndef EPICS_3_13
-static const iocshFuncDef mdDef =
-    { "md", 3, (const iocshArg *[]) {
-    &(iocshArg) { "[addrspace:]address", iocshArgString },
-    &(iocshArg) { "[wordsize={1|2|4|8|-2|-4|-8}]", iocshArgInt },
-    &(iocshArg) { "[bytes]", iocshArgInt },
-}};
+static const iocshArg mdArg0 = { "[addrspace:]address", iocshArgString };
+static const iocshArg mdArg1 = { "[wordsize={1|2|4|8|-2|-4|-8}]", iocshArgInt };
+static const iocshArg mdArg2 = { "[bytes]", iocshArgInt };
+static const iocshArg *mdArgs[] = {&mdArg0, &mdArg1, &mdArg2};
+static const iocshFuncDef mdDef = { "md", 3, mdArgs };
 
 static void mdFunc(const iocshArgBuf *args)
 {
     md(args[0].sval, args[1].ival, args[2].ival);
 }
-    
-static const iocshFuncDef devReadProbeDef =
-    { "devReadProbe", 2, (const iocshArg *[]) {
-    &(iocshArg) { "wordsize={1|2|4|8}", iocshArgInt },
-    &(iocshArg) { "[{A16|A24|A32|CRCSR}:]address", iocshArgString },
-}};
+
+static const iocshArg devReadProbeArg0 = { "wordsize={1|2|4|8}", iocshArgInt };
+static const iocshArg devReadProbeArg1 = { "[{A16|A24|A32|CRCSR}:]address", iocshArgString };
+static const iocshArg *devReadProbeArgs[] = {&devReadProbeArg0, &devReadProbeArg1 };
+static const iocshFuncDef devReadProbeDef = { "devReadProbe", 2, devReadProbeArgs };
 
 static void devReadProbeFunc(const iocshArgBuf *args)
 {
@@ -270,13 +262,13 @@ static void devReadProbeFunc(const iocshArgBuf *args)
     switch (devReadProbe(wordsize, addr.ptr, &val))
     {
         case S_dev_addressNotFound:
-            printf("%p is not a VME address.\n", addr.ptr);
+            printf("Cannot get VME mapping for %s.\n", address);
             break;
         case S_dev_badArgument:
             printf("Illegal word size %d\n", wordsize);
             break;
         case S_dev_noDevice:
-            printf("Bus error at %p\n", addr.ptr);
+            printf("Bus error at %s\n", address);
             break;
         case S_dev_success:
             switch (wordsize)
@@ -296,12 +288,11 @@ static void devReadProbeFunc(const iocshArgBuf *args)
     }
 }
 
-static const iocshFuncDef devWriteProbeDef =
-    { "devWriteProbe", 3, (const iocshArg *[]) {
-    &(iocshArg) { "wordsize={1|2|4|8}", iocshArgInt },
-    &(iocshArg) { "[{A16|A24|A32|CRCSR}:]address", iocshArgString },
-    &(iocshArg) { "value", iocshArgInt },
-}};
+static const iocshArg devWriteProbeArg0 = { "wordsize={1|2|4|8}", iocshArgInt };
+static const iocshArg devWriteProbeArg1 = { "[{A16|A24|A32|CRCSR}:]address", iocshArgString };
+static const iocshArg devWriteProbeArg2 = { "value", iocshArgInt };
+static const iocshArg *devWriteProbeArgs[] = {&devWriteProbeArg0, &devWriteProbeArg1 };
+static const iocshFuncDef devWriteProbeDef = { "devWriteProbe", 3, devWriteProbeArgs };
 
 static void devWriteProbeFunc(const iocshArgBuf *args)
 {
@@ -331,13 +322,13 @@ static void devWriteProbeFunc(const iocshArgBuf *args)
     switch (devWriteProbe(wordsize, addr.ptr, &val))
     {
         case S_dev_addressNotFound:
-            printf("%p is not a VME address.\n", addr.ptr);
+            printf("Cannot get VME mapping for %s.\n", address);
             break;
         case S_dev_badArgument:
             printf("Illegal word size %d.\n", wordsize);
             break;
         case S_dev_noDevice:
-            printf("Bus error at %p\n", addr.ptr);
+            printf("Bus error at %s\n", address);
             break;
         case S_dev_success:
             printf("Success.\n");
@@ -349,12 +340,10 @@ static void devWriteProbeFunc(const iocshArgBuf *args)
 
 static void memDisplayRegistrar(void)
 {
-#ifndef vxWorks
-    memDisplayInstallAddrHandler("A16",   VME_AddrHandler, atVMEA16);
-    memDisplayInstallAddrHandler("A24",   VME_AddrHandler, atVMEA24);
-    memDisplayInstallAddrHandler("A32",   VME_AddrHandler, atVMEA32);
     memDisplayInstallAddrHandler("CRCSR", VME_AddrHandler, atVMECSR);
-#endif
+    memDisplayInstallAddrHandler("A32",   VME_AddrHandler, atVMEA32);
+    memDisplayInstallAddrHandler("A24",   VME_AddrHandler, atVMEA24);
+    memDisplayInstallAddrHandler("A16",   VME_AddrHandler, atVMEA16);
 
     iocshRegister(&mdDef, mdFunc);
     iocshRegister(&devReadProbeDef, devReadProbeFunc);
@@ -362,18 +351,19 @@ static void memDisplayRegistrar(void)
 }
 
 epicsExportRegistrar(memDisplayRegistrar);
-#endif
 
-#ifdef vxWorks
-static void memDisplayInit() __attribute__((constructor));
-static void memDisplayInit()
+#else /* EPICS_3_13 */
+
+static int memDisplayInit()
 {
-    memDisplayInstallAddrHandler("A16",   VME_AddrHandler, VME_AM_SUP_SHORT_IO);
-    memDisplayInstallAddrHandler("A24",   VME_AddrHandler, VME_AM_STD_SUP_DATA);
-    memDisplayInstallAddrHandler("A32",   VME_AddrHandler, VME_AM_EXT_SUP_DATA);
 #ifdef VME_AM_CSR
     memDisplayInstallAddrHandler("CRCSR", VME_AddrHandler, VME_AM_CSR);
 #endif
+    memDisplayInstallAddrHandler("A32",   VME_AddrHandler, VME_AM_EXT_SUP_DATA);
+    memDisplayInstallAddrHandler("A24",   VME_AddrHandler, VME_AM_STD_SUP_DATA);
+    memDisplayInstallAddrHandler("A16",   VME_AddrHandler, VME_AM_SUP_SHORT_IO);
+    return 0;
 }
+static int init = memDisplayInit();
 
-#endif
+#endif /* EPICS_3_13 */
