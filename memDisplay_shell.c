@@ -33,7 +33,7 @@
 
 epicsExportAddress(int, memDisplayDebug);
 
-static volatile void* VME_AddrHandler(size_t addr, size_t size, size_t addrSpace)
+volatile void* memDisplayVMEAddrHandler(size_t addr, size_t size, size_t addrSpace)
 {
     volatile void* ptr;
 #ifndef EPICS_3_13
@@ -183,7 +183,7 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
     return (remote_addr_t){NULL, 0};
 }
 
-extern "C" void md(const char* addressStr, int wordsize, int bytes)
+void md(const char* addressStr, int wordsize, int bytes)
 {
     remote_addr_t addr;
     static remote_addr_t old_addr = {0};
@@ -340,10 +340,10 @@ static void devWriteProbeFunc(const iocshArgBuf *args)
 
 static void memDisplayRegistrar(void)
 {
-    memDisplayInstallAddrHandler("CRCSR", VME_AddrHandler, atVMECSR);
-    memDisplayInstallAddrHandler("A32",   VME_AddrHandler, atVMEA32);
-    memDisplayInstallAddrHandler("A24",   VME_AddrHandler, atVMEA24);
-    memDisplayInstallAddrHandler("A16",   VME_AddrHandler, atVMEA16);
+    memDisplayInstallAddrHandler("CRCSR", memDisplayVMEAddrHandler, atVMECSR);
+    memDisplayInstallAddrHandler("A32",   memDisplayVMEAddrHandler, atVMEA32);
+    memDisplayInstallAddrHandler("A24",   memDisplayVMEAddrHandler, atVMEA24);
+    memDisplayInstallAddrHandler("A16",   memDisplayVMEAddrHandler, atVMEA16);
 
     iocshRegister(&mdDef, mdFunc);
     iocshRegister(&devReadProbeDef, devReadProbeFunc);
@@ -351,19 +351,5 @@ static void memDisplayRegistrar(void)
 }
 
 epicsExportRegistrar(memDisplayRegistrar);
-
-#else /* EPICS_3_13 */
-
-static int memDisplayInit()
-{
-#ifdef VME_AM_CSR
-    memDisplayInstallAddrHandler("CRCSR", VME_AddrHandler, VME_AM_CSR);
-#endif
-    memDisplayInstallAddrHandler("A32",   VME_AddrHandler, VME_AM_EXT_SUP_DATA);
-    memDisplayInstallAddrHandler("A24",   VME_AddrHandler, VME_AM_STD_SUP_DATA);
-    memDisplayInstallAddrHandler("A16",   VME_AddrHandler, VME_AM_SUP_SHORT_IO);
-    return 0;
-}
-static int init = memDisplayInit();
 
 #endif /* EPICS_3_13 */
