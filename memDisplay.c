@@ -62,7 +62,7 @@ int memDisplay(size_t base, volatile void* ptr, int wordsize, size_t bytes)
 }
 
 /* Split fmemDisplay into three functions to avoid warnings about clobbered variables */
-int fmemDisplay_loop(FILE* file, size_t base, volatile void* ptr, int wordsize, size_t bytes, int swap, int addr_wordsize, uint64_t offset, size_t size)
+static int fmemDisplay_loop(FILE* file, size_t base, volatile void* ptr, int wordsize, size_t bytes, int swap, int addr_wordsize, uint64_t offset, size_t size)
 {
     unsigned char buffer[16];
     size_t i, j, len=0;
@@ -169,7 +169,7 @@ static void memDisplaySigAction(int sig, siginfo_t *info, void *ctx)
     longjmp(memDisplayFail, 1);
 }
 
-int fmemDisplay_wrap(FILE* file, size_t base, volatile void* ptr, int wordsize, size_t bytes, int swap, int addr_wordsize, uint64_t offset, size_t size)
+static int fmemDisplay_wrap(FILE* file, size_t base, volatile void* ptr, int wordsize, size_t bytes, int swap, int addr_wordsize, uint64_t offset, size_t size)
 {
     int len;
     struct sigaction sa = {{0}}, oldsa;
