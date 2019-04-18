@@ -14,12 +14,12 @@ Output looks like this:
     7f11453f9530: 8948 246c 48d8 f589 8d48 8235 0008 4800 H.l$.H..H.5....H
     7f11453f9540: 5c89 d024 894c 2464 49e0 d489 894c 246c .\$.L.d$.I..L.l$
 
-### memDisplay
+## memDisplay
 
     int memDisplay(size_t base, volatile void* ptr, int wordsize, size_t bytes);
     int fmemDisplay(FILE* outfile, size_t base, volatile void* ptr, int wordsize, size_t bytes);
 
-Display memory region starting at `ptr` of length `bytes` in hex and ASCII.
+Displays memory region starting at `ptr` of length `bytes` in hex and ASCII.
 Output goes to `stdout` or the file `outfile`.
 Lines of 16 bytes are prefixed with a hex address starting at `base`
 (which may be different from `ptr`, for example for memory mapped devices).
@@ -29,9 +29,7 @@ If `wordsize` is negative, the words are displayed byte swapped.
 A signal handler is active during the execution of `memDisplay` to catch any
 access to invalid addresses so that the program will not crash.
 
-## iocsh functions
-
-### md
+## md
 
     md address wordsize bytes
 
@@ -39,10 +37,11 @@ This iocsh function calls memDisplay.
 The `address` parameter can be a number (may be hex) to denote a
 memory location, but it can also be the name of a global variable
 (or other global symbol, e.g. a function).
-Furthermore, `address` can be a number prefixed by `A16:`, `A24:`,
-`A32:` or `CRCSR:` to display VME address regions, for example `A16:0x8000`.
 
-Other handlers of the form `xxx:` can be installed (see below).
+Furthermore, `address` can be a number prefixed by an address space
+name and a colon like `A16:`.
+No address spaces are installed by default but other modules may
+install address spaces (see below).
 
 If `wordsize` or `bytes` is not specified, the prevous value is used,
 starting with wordsize 2 and 64 bytes.
@@ -50,28 +49,16 @@ starting with wordsize 2 and 64 bytes.
 If `address` is not specified, the memory block directly following the
 block of the prevoius call is displayed.
 
-### devReadProbe and devWriteProbe
-
-    devReadProbe wordsize address
-    devWriteProbe wordsize address value
-
-These are iocsh wrappers for the devLib functions of the same name.
-
-The parameters `wordsize` and `address` have the same meaning as for
-the `md` function. In particular the same syntax for `address` can be used.
-
-## Helper function
-
-### memDisplayInstallAddrHandler
+## memDisplayInstallAddrHandler
 
     typedef volatile void* (*memDisplayAddrHandler) (size_t addr, size_t size, size_t usr);
-    void memDisplayInstallAddrHandler(const char* str, memDisplayAddrHandler handler, size_t usr);
+    void memDisplayInstallAddrHandler(const char* name, memDisplayAddrHandler handler, size_t usr);
 
 This function can be used to install new handlers for the `address`
-parameter of the above iocsh functions.
+parameter of `md`.
 
 The handler function is supposed to map an address region to a pointer.
-The installer function binds the helper function to a string so that
-this string followed by `:` can be used in the `address` parameter of
-the above iocsh wrapper functions.
-The parameter `usr` is an arbitrary value that can be used by the handler.
+The installer function binds the helper function to `name` so that
+`name:` can be used as a prefix in the `address` parameter of `md`.
+The parameter `usr` is an arbitrary value which the handler may use.
+It is large enough to fit a pointer.

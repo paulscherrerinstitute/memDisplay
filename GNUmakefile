@@ -6,7 +6,6 @@ include /ioc/tools/driver.makefile
 
 BUILDCLASSES += Linux
 SOURCES = memDisplay.c memDisplay_shell.c
-SOURCES_3_13 = memDisplay_init_3_13.c
 USR_CFLAGS += -D WITH_SYMBOLNAME
 
 HEADERS = memDisplay.h

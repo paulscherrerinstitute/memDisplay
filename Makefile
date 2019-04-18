@@ -13,10 +13,6 @@ DBDS = memDisplay.dbd
 LIB_SRCS += memDisplay.c
 LIB_SRCS += memDisplay_shell.c
 
-ifndef BASE_3_14
-LIB_SRCS += memDisplay_init_3_13.cc
-endif
-
 ifdef symbolname
 # have the optional symbolname package?
 LIB_LIBS += symbolname
