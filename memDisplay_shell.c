@@ -149,6 +149,12 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
     return (remote_addr_t){NULL, 0};
 }
 
+volatile void* strToPtr(const char* addrstr, size_t size)
+{
+    remote_addr_t addr = stringToAddr(addrstr, 0, size);
+    return addr.ptr;
+}
+
 void md(const char* addressStr, int wordsize, int bytes)
 {
     remote_addr_t addr;

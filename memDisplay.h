@@ -28,6 +28,7 @@ epicsShareFunc void memDisplayInstallAddrTranslator(memDisplayAddrTranslator han
 
 epicsShareFunc unsigned long long strToSize(const char* str, char** endptr);
 epicsShareFunc char* sizeToStr(unsigned long long size, char* str);
+epicsShareFunc volatile void* strToPtr(const char* addrstr, size_t size);
 
 #ifdef __cplusplus
 }
