@@ -61,4 +61,15 @@ The handler function is supposed to map an address region to a pointer.
 The installer function binds the helper function to `name` so that
 `name:` can be used as a prefix in the `address` parameter of `md`.
 The parameter `usr` is an arbitrary value which the handler may use.
-It is large enough to fit a pointer.
+It is large enough to hold a pointer.
+
+## memDisplayInstallAddrTranslator
+
+    typedef volatile void* (*memDisplayAddrTranslator) (const char* addr, size_t offs, size_t size);
+    void memDisplayInstallAddrTranslator(memDisplayAddrTranslator handler);
+
+This is an alternative function to install an address translation.
+It can be used instead of memDisplayInstallAddrHandler if there is no
+fixed set of address space names. Instead the translator function
+parses the `addr` string each time it is called. The content of `offset`
+should be added to the value in the string before conversion to a pointer.
