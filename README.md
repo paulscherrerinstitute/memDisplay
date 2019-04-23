@@ -69,7 +69,33 @@ It is large enough to hold a pointer.
     void memDisplayInstallAddrTranslator(memDisplayAddrTranslator handler);
 
 This is an alternative function to install an address translation.
-It can be used instead of memDisplayInstallAddrHandler if there is no
+It can be used instead of `memDisplayInstallAddrHandler` if there is no
 fixed set of address space names. Instead the translator function
 parses the `addr` string each time it is called. The content of `offset`
 should be added to the value in the string before conversion to a pointer.
+
+## Utility functions
+
+For the convenience of other software, some utility functions are exported.
+
+    unsigned long long strToSize(const char* str, char** endptr);
+    char* sizeToStr(unsigned long long size, char* str);
+    volatile void* strToPtr(const char* addrstr, size_t size);
+
+`strToSize` converts a string containing integer numbers (decimal or
+hex with `0x` prefix)  and unit prefixes like `k`, `M`, `G`, `T`, `P`, `E`
+to an integer number. The unit prefixes assume powers of 1024,
+as usual for memory sizes. Valid examples are:
+  * 512
+  * 0x1000
+  * 1k
+  * 1G3M5k4
+
+`sizeToStr` converts an integer number to a sting of the form `0xXXXXX=aGbMckd`,
+i.e. a hexadecimal number, a `=` and a string with unit prefixes as above.
+The numeric components of the string will be in the range 1-1023 with all
+components with the value 0 skipped (except for the value 0 itself).
+
+`stringToPtr` converts a string of the form `addrspace:offset` to a pointer
+using the installed address space handlers to look up an address mapping.
+Again, unit prefixes are allowed, e.g. `A32:1G`.
