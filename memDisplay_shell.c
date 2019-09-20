@@ -8,7 +8,7 @@
 #ifndef BASE_VERSION
 /* 3.14+ */
 #include <epicsStdioRedirect.h>
-#include <devLibVME.h>
+#include <devLib.h>
 #include <iocsh.h>
 #else
 #define EPICS_3_13
@@ -18,20 +18,18 @@
 #include "symbolname.h"
 #endif
 
-#include <epicsExport.h>
 #include "memDisplay.h"
 
-epicsExportAddress(int, memDisplayDebug);
-
 struct addressHandlerItem {
-    const char* str;
+    const char* name;
     memDisplayAddrHandler handler;
     size_t usr;
     struct addressHandlerItem* next;
 } *addressHandlerList = NULL;
 
-void memDisplayInstallAddrHandler(const char* str, memDisplayAddrHandler handler, size_t usr)
+void memDisplayInstallAddrHandler(const char* name, memDisplayAddrHandler handler, size_t usr)
 {
+    char *s;
     struct addressHandlerItem* item =
         (struct addressHandlerItem*) malloc(sizeof(struct addressHandlerItem));
     if (!item)
@@ -39,11 +37,18 @@ void memDisplayInstallAddrHandler(const char* str, memDisplayAddrHandler handler
         printf("Out of memory.\n");
         return;
     }
-    item->str = epicsStrDup(str);
+    if (!name)
+    {
+        printf("missing name.\n");
+        return;
+    }
+    s = malloc(strlen(name)+1);
+    strcpy(s, name);
+    item->name = s;
     item->handler = handler;
     item->usr = usr;
     item->next = addressHandlerList;
-    addressHandlerList = item;       
+    addressHandlerList = item;
 }
 
 struct addressTranslatorItem {
@@ -62,7 +67,7 @@ void memDisplayInstallAddrTranslator(memDisplayAddrTranslator translator)
     }
     item->translator = translator;
     item->next = addressTranslatorList;
-    addressTranslatorList = item;       
+    addressTranslatorList = item;
 }
 
 typedef struct {volatile void* ptr; size_t offs;} remote_addr_t;
@@ -77,8 +82,8 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
 
     for (hitem = addressHandlerList; hitem != NULL; hitem = hitem->next)
     {
-        len = strlen(hitem->str);
-        if (strncmp(addrstr, hitem->str, len) == 0 &&
+        len = strlen(hitem->name);
+        if (strncmp(addrstr, hitem->name, len) == 0 &&
             (addrstr[len] == 0 || addrstr[len] == ':'))
         {
             if (addrstr[len])
@@ -102,10 +107,10 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
             {
                 if (errno)
                     fprintf(stderr, "Getting address 0x%llx in %s address space failed: %s\n",
-                        addr, hitem->str, strerror(errno));
+                        addr, hitem->name, strerror(errno));
                 else
                     fprintf(stderr, "Getting address 0x%llx in %s address space failed.\n",
-                        addr, hitem->str);
+                        addr, hitem->name);
             }
             return (remote_addr_t){ptr, addr};
         }
@@ -149,44 +154,44 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
     return (remote_addr_t){NULL, 0};
 }
 
-volatile void* strToPtr(const char* addrstr, size_t size)
+volatile void* strToPtr(const char* addrStr, size_t size)
 {
-    remote_addr_t addr = stringToAddr(addrstr, 0, size);
+    remote_addr_t addr = stringToAddr(addrStr, 0, size);
     return addr.ptr;
 }
 
-void md(const char* addressStr, int wordsize, int bytes)
+void md(const char* addrStr, int wordsize, int bytes)
 {
     remote_addr_t addr;
     static remote_addr_t old_addr = {0};
     static int old_wordsize = 2;
     static int old_bytes = 0x80;
-    static char* old_addressStr;
+    static char* old_addrStr;
     static size_t old_offs;
- 
-    if ((!addressStr && !old_addr.ptr) || (addressStr && addressStr[0] == '?'))
+
+    if ((!addrStr && !old_addr.ptr) || (addrStr && addrStr[0] == '?'))
     {
         printf("md \"[addrspace:]address\", [wordsize={1|2|4|8|-2|-4|-8}], [bytes]\n");
         return;
     }
-    if (addressStr)
+    if (addrStr)
     {
 #ifdef vxWorks
-        old_addressStr = (char*)addressStr;
+        old_addrStr = (char*)addrStr;
 #else
-        free(old_addressStr);
-        old_addressStr = epicsStrDup(addressStr);
+        free(old_addrStr);
+        old_addrStr = epicsStrDup(addrStr);
 #endif
         old_offs = 0;
         old_wordsize = 2;
     }
     else
     {
-        addressStr = old_addressStr;
+        addrStr = old_addrStr;
     }
     if (bytes == 0) bytes = old_bytes;
     if (wordsize == 0) wordsize = old_wordsize;
-    addr = stringToAddr(addressStr, old_offs, bytes);
+    addr = stringToAddr(addrStr, old_offs, bytes);
     if (!addr.ptr)
         return;
     if (memDisplay(addr.offs, addr.ptr, wordsize, bytes) < 0)
@@ -201,6 +206,9 @@ void md(const char* addressStr, int wordsize, int bytes)
 }
 
 #ifndef EPICS_3_13
+#include <epicsExport.h>
+epicsExportAddress(int, memDisplayDebug);
+
 static const iocshArg mdArg0 = { "[addrspace:]address", iocshArgString };
 static const iocshArg mdArg1 = { "[wordsize={1|2|4|8|-2|-4|-8}]", iocshArgInt };
 static const iocshArg mdArg2 = { "[bytes]", iocshArgInt };
