@@ -39,7 +39,7 @@ void memDisplayInstallAddrHandler(const char* name, memDisplayAddrHandler handle
     }
     if (!name)
     {
-        printf("missing name.\n");
+        printf("Missing name.\n");
         return;
     }
     s = malloc(strlen(name)+1);
@@ -71,7 +71,7 @@ void memDisplayInstallAddrTranslator(memDisplayAddrTranslator translator)
 }
 
 typedef struct {volatile void* ptr; size_t offs;} remote_addr_t;
-static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
+static remote_addr_t strToAddr(const char* addrstr, size_t offs, size_t size)
 {
     unsigned long long addr = 0;
     size_t len;
@@ -156,7 +156,7 @@ static remote_addr_t stringToAddr(const char* addrstr, size_t offs, size_t size)
 
 volatile void* strToPtr(const char* addrStr, size_t size)
 {
-    remote_addr_t addr = stringToAddr(addrStr, 0, size);
+    remote_addr_t addr = strToAddr(addrStr, 0, size);
     return addr.ptr;
 }
 
@@ -191,7 +191,7 @@ void md(const char* addrStr, int wordsize, int bytes)
     }
     if (bytes == 0) bytes = old_bytes;
     if (wordsize == 0) wordsize = old_wordsize;
-    addr = stringToAddr(addrStr, old_offs, bytes);
+    addr = strToAddr(addrStr, old_offs, bytes);
     if (!addr.ptr)
         return;
     if (memDisplay(addr.offs, addr.ptr, wordsize, bytes) < 0)

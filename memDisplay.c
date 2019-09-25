@@ -4,6 +4,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <ctype.h>
 
 #ifdef __unix
@@ -13,8 +14,7 @@
 #endif
 
 #ifdef vxWorks
-#define HAVE_setjmp_and_signal
-#define bswap_16(x) WORDSWAP(x)
+#define bswap_16(x) (MSB(x) | (LSB(x) << 8))
 #define bswap_32(x) LONGSWAP(x)
 #endif
 
@@ -30,22 +30,18 @@
 #endif
 
 #ifndef bswap_64
-#define bswap_64(x) ((((x) & 0xff00000000000000ull) >> 56) \
-                   | (((x) & 0x00ff000000000000ull) >> 40) \
-                   | (((x) & 0x0000ff0000000000ull) >> 24) \
-                   | (((x) & 0x000000ff00000000ull) >>  8) \
-                   | (((x) & 0x00000000ff000000ull) <<  8) \
-                   | (((x) & 0x0000000000ff0000ull) << 24) \
-                   | (((x) & 0x000000000000ff00ull) << 40) \
-                   | (((x) & 0x00000000000000ffull) << 56))
+#define bswap_64(x) (bswap_32(x)<<32 | bswap_32(x>>32))
 #endif
 
 #ifdef HAVE_stdint
 #include <stdint.h>
 #else
-#define uint32_t unsigned int
-#define uint64_t unsigned long long
 #define UINT64_C(c) c ## ULL
+#endif
+
+#ifdef HAVE_setjmp_and_signal
+#include <signal.h>
+#include <setjmp.h>
 #endif
 
 #if !(XOPEN_SOURCE >= 600 || _BSD_SOURCE || _SVID_SOURCE || _ISOC99_SOURCE)
@@ -62,20 +58,109 @@ int memDisplay(size_t base, volatile void* ptr, int wordsize, size_t bytes)
     return fmemDisplay(stdout, base, ptr, wordsize, bytes);
 }
 
-/* Split fmemDisplay into three functions to avoid warnings about clobbered variables */
-static int fmemDisplay_loop(FILE* file, size_t base, volatile char* ptr, int wordsize, size_t bytes, int addr_wordsize, uint64_t offset, size_t size)
+#ifdef HAVE_setjmp_and_signal
+/* Setup handler to catch access to invalid addresses (avoids crash) */
+
+static sigjmp_buf addressFailEnv;
+static struct sigaction oldsigsegv, oldsigbus;
+
+static void signalsOff()
+{
+    sigaction(SIGSEGV, &oldsigsegv, NULL);
+    sigaction(SIGBUS, &oldsigbus, NULL);
+    if (memDisplayDebug)
+        fprintf(stderr, "Signal handlers removed for SIGSEGV(%d) and SIGBUS(%d)\n",
+            SIGSEGV, SIGBUS);
+}
+
+static void sigAction(int sig, siginfo_t *info, void *ctx)
+{
+#ifdef si_addr
+    fprintf(stderr, "%s at address %p.\n", strsignal(sig), info->si_addr);
+#else
+    fprintf(stderr, "%s\n", strsignal(sig));
+#endif
+    signalsOff();
+    siglongjmp(addressFailEnv, 1);
+}
+
+static void signalsOn()
+{
+    struct sigaction sa = {{0}};
+    sa.sa_sigaction = sigAction;
+    sa.sa_flags = SA_SIGINFO;
+    sigaction(SIGSEGV, &sa, &oldsigsegv);
+    sigaction(SIGBUS, &sa, &oldsigbus);
+    if (memDisplayDebug)
+        fprintf(stderr, "Signal handlers installed for SIGSEGV(%d) and SIGBUS(%d)\n",
+            SIGSEGV, SIGBUS);
+}
+#endif
+
+int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_t bytes)
 {
     unsigned char buffer[16];
-    size_t i, j, len=0;
-    unsigned long long x=0;
-    int abswordsize=abs(wordsize);
+    unsigned long long offset;
+    size_t i, j, len = 0;
+    unsigned long long x = 0;
+    int abswordsize = abs(wordsize);
+    size_t size, mask;
+
+    int addr_wordsize = ((base + bytes - 1) & UINT64_C(0xffff000000000000)) ? 16 :
+                        ((base + bytes - 1) &     UINT64_C(0xffff00000000)) ? 12 :
+                        ((base + bytes - 1) &         UINT64_C(0xffff0000)) ? 8 : 4;
+
+    switch (wordsize)
+    {
+        case 1:
+        case 2:
+        case 4:
+        case 8:
+        case -1:
+        case -2:
+        case -4:
+        case -8:
+            break;
+        default:
+            fprintf(stdout, "Invalid data wordsize %d\n", wordsize);
+            return -1;
+    }
 
     memset(buffer, ' ', sizeof(buffer));
+
     if (memDisplayDebug)
-        fprintf(stderr, "memDisplay: address %p\n", ptr+(base&15));
+        fprintf(stderr, "memDisplay: base=0x%llx ptr=%p wordsize=%d bytes=%llu\n",
+            (unsigned long long)base, ptr, wordsize, (unsigned long long)bytes);
+
+    /* align start to wordsize */
+    mask = abs(wordsize)-1;
+    ptr = (volatile void*)((size_t)ptr - (base & mask));
+    base &= ~mask;
+
+    if (memDisplayDebug)
+        fprintf(stderr, "memDisplay: Adjusted base=0x%llx ptr=%p wordsize=%d\n",
+            (unsigned long long)base, ptr, wordsize);
+
+    /* round down start address to multiple of 16 */
+    offset = base & ~15;
+    size = bytes + (base & 15);
+    ptr = (void*)((size_t)ptr - (base & 15));
+
+    if (memDisplayDebug)
+        fprintf(stderr, "memDisplay: Round down base=0x%llx ptr=%p offset=%llu size=%llu\n",
+            (unsigned long long)base, ptr, offset, (unsigned long long)size);
+
+#ifdef HAVE_setjmp_and_signal
+    signalsOn();
+    if (sigsetjmp(addressFailEnv, 1) != 0) {
+        fprintf(file, "<aborted>\n");
+        return -1;
+    }
+#endif
+
     for (i = 0; i < size; i += 16)
     {
-        len += fprintf(file, "%0*llx: ", addr_wordsize, (unsigned long long)offset);
+        len += fprintf(file, "%0*llx: ", addr_wordsize, offset);
         for (j = 0; j < 16; j += abswordsize) {
             if (offset + j < base || i + j >= size)
                 len += fprintf(file, "%*c ", 2*abswordsize, ' ');
@@ -84,6 +169,7 @@ static int fmemDisplay_loop(FILE* file, size_t base, volatile char* ptr, int wor
                 switch (wordsize)
                 {
                     case 1:
+                    case -1:
                         x = *(uint8_t*)ptr;
                         *(uint8_t*)(buffer + j) = x;
                         break;
@@ -100,15 +186,18 @@ static int fmemDisplay_loop(FILE* file, size_t base, volatile char* ptr, int wor
                         *(uint64_t*)(buffer + j) = x;
                         break;
                     case -2:
-                        x = bswap_16(*(uint16_t*)ptr);
+                        x = *(uint16_t*)ptr;
+                        x = bswap_16(x);
                         *(uint16_t*)(buffer + j) = x;
                         break;
                     case -4:
-                        x = bswap_32(*(uint32_t*)ptr);
+                        x = *(uint32_t*)ptr;
+                        x = bswap_32(x);
                         *(uint32_t*)(buffer + j) = x;
                         break;
                     case -8:
-                        x = bswap_64(*(uint64_t*)ptr);
+                        x = *(uint64_t*)ptr;
+                        x = bswap_64(x);
                         *(uint64_t*)(buffer + j) = x;
                         break;
                 }
@@ -125,135 +214,10 @@ static int fmemDisplay_loop(FILE* file, size_t base, volatile char* ptr, int wor
         offset += 16;
         len += fprintf(file, "\n");
     }
+#ifdef HAVE_setjmp_and_signal
+    signalsOff();
+#endif
     return len;
-}
-
-#ifdef HAVE_setjmp_and_signal
-/* Setup handler to catch access to invalid addresses (avoids crash) */
-#include <signal.h>
-#include <setjmp.h>
-
-#ifdef vxWorks
-/* have no strsignal() */
-const char* strsignal(int sig)
-{
-    switch (sig) {
-        case SIGSEGV:
-            return "SIGSEGV";
-        case SIGBUS:
-            return "SIGBUS";
-        default:
-        {
-            static char buffer[16];
-            sprintf(buffer, "signal %d", sig);
-            return buffer;
-        }
-    }
-}
-#endif
-
-static jmp_buf memDisplayFail;
-static void memDisplaySigAction(int sig, siginfo_t *info, void *ctx)
-{
-    printf("\n");
-#ifdef si_addr
-    fprintf(stderr, "memDisplay failed with %s at address %p.\n", strsignal(sig), info->si_addr);
-#else
-    fprintf(stderr, "memDisplay failed with %s\n", strsignal(sig));
-#endif
-    longjmp(memDisplayFail, 1);
-}
-
-static int fmemDisplay_wrap(FILE* file, size_t base, volatile void* ptr, int wordsize, size_t bytes, int addr_wordsize, uint64_t offset, size_t size)
-{
-    int len;
-    struct sigaction sa = {{0}}, oldsigsegv, oldsigbus;
-    sa.sa_sigaction = memDisplaySigAction;
-    sa.sa_flags = SA_SIGINFO;
-#ifdef SA_NODEFER
-    sa.sa_flags |= SA_NODEFER; /* Do not block signal */
-#endif
-    sigaction(SIGSEGV, &sa, &oldsigsegv);
-    sigaction(SIGBUS, &sa, &oldsigbus);
-    if (memDisplayDebug)
-        fprintf(stderr, "memDisplay: signal handlers installed for SIGSEGV(%d) and SIGBUS(%d)\n",
-            SIGSEGV, SIGBUS);
-
-    if (setjmp(memDisplayFail) != 0)
-    {
-#ifndef SA_NODEFER
-        /* Unblock signal */
-        sigset_t sigmask;
-        sigemptyset(&sigmask);
-        sigaddset(&sigmask, SIGSEGV);
-        sigaddset(&sigmask, SIGBUS);
-        sigprocmask(SIG_UNBLOCK, &sigmask, NULL);
-#endif
-        fflush(file);
-        len = -1;
-    }
-    else
-    {
-        len = fmemDisplay_loop(file, base, ptr, wordsize, bytes, addr_wordsize, offset, size);
-    }
-    sigaction(SIGSEGV, &oldsigsegv, NULL);
-    sigaction(SIGBUS, &oldsigbus, NULL);
-    if (memDisplayDebug)
-        fprintf(stderr, "memDisplay: signal handlers removed for SIGSEGV and SIGBUS\n");
-    return (int)len;
-}
-#endif /* HAVE_setjmp_and_signal */
-
-int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_t bytes)
-{
-    uint64_t offset;
-    size_t size, mask;
-    int addr_wordsize = ((base + bytes - 1) & UINT64_C(0xffff000000000000)) ? 16 :
-                        ((base + bytes - 1) &     UINT64_C(0xffff00000000)) ? 12 :
-                        ((base + bytes - 1) &         UINT64_C(0xffff0000)) ? 8 : 4;
-
-    if (memDisplayDebug)
-        fprintf(stderr, "memDisplay base=0x%llx ptr=%p wordsize=%d bytes=%llu\n",
-            (unsigned long long)base, ptr, wordsize, (unsigned long long)bytes);
-
-    switch (wordsize)
-    {
-        case 1:
-        case 2:
-        case 4:
-        case 8:
-        case -2:
-        case -4:
-        case -8:
-            break;
-        default:
-            fprintf(stdout, "Invalid data wordsize %d\n", wordsize);
-            return -1;
-    }
-
-    /* align start */
-    mask = abs(wordsize)-1;
-    ptr = (volatile void*)((size_t)ptr - (base & mask));
-    base &= ~mask;
-
-    if (memDisplayDebug)
-        fprintf(stderr, "memDisplay adjusted base=0x%llx ptr=%p wordsize=%d\n",
-            (unsigned long long)base, ptr, wordsize);
-
-    /* round down start address to multiple of 16 */
-    offset = base & ~15;
-    size = bytes + (base & 15);
-    ptr = (void*)((size_t)ptr - (base & 15));
-
-    if (memDisplayDebug)
-        fprintf(stderr, "memDisplay round down base=0x%llx ptr=%p offset=%llu size=%llu\n",
-            (unsigned long long)base, ptr, (unsigned long long)offset, (unsigned long long)size);
-
-#ifdef HAVE_setjmp_and_signal
-    return fmemDisplay_wrap(file, base, ptr, wordsize, bytes, addr_wordsize, offset, size);
-#else
-    return fmemDisplay_loop(file, base, ptr, wordsize, bytes, addr_wordsize, offset, size);
-#endif
 }
 
 unsigned long long strToSize(const char* str, char** endptr)
