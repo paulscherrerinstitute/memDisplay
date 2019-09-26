@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <time.h>
 
 #ifdef __unix
 #define HAVE_byteswap
@@ -16,6 +17,9 @@
 #ifdef vxWorks
 #define bswap_16(x) (MSB(x) | (LSB(x) << 8))
 #define bswap_32(x) LONGSWAP(x)
+#include <tickLib.h>
+#include <sysLib.h>
+#define clock_gettime(clock, stamp) do {int tick = tickGet(); int rate = sysClkRateGet(); (stamp)->tv_sec=tick/rate; (stamp)->tv_nsec=1000000000ULL*(tick-(stamp)->tv_sec*rate)/rate;} while(0)
 #endif
 
 #ifdef _WIN32
@@ -218,6 +222,220 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
     signalsOff();
 #endif
     return len;
+}
+
+int memfill(volatile void* address, int pattern, size_t size, int wordsize, int increment)
+{
+    size_t i;
+    int abswordsize;
+
+    if (!wordsize) {
+        if (pattern & 0xffff0000) wordsize=4;
+        else if (pattern & 0xff00) wordsize=2;
+        else wordsize=1;
+    }
+    abswordsize = abs(wordsize);
+
+#ifdef HAVE_setjmp_and_signal
+    signalsOn();
+    if (sigsetjmp(addressFailEnv, 1) != 0)
+        return -1;
+#endif
+    for (i = 0; i < size/abswordsize; i++)
+    {
+        switch (wordsize)
+        {
+            case 0:
+            case 1:
+            case -1:
+                ((volatile uint8_t*)address)[i] = pattern;
+                break;
+            case 2:
+                ((volatile uint16_t*)address)[i] = pattern;
+                break;
+            case 4:
+                ((volatile uint32_t*)address)[i] = pattern;
+                break;
+            case -2:
+                ((volatile uint16_t*)address)[i] = bswap_16(pattern);
+                break;
+            case -4:
+                ((volatile uint32_t*)address)[i] = bswap_32(pattern);
+                break;
+            default:
+                fprintf(stderr, "Illegal wordsize %d: must be 1, 2, 4, -2, -4\n", wordsize);
+#ifdef HAVE_setjmp_and_signal
+                signalsOff();
+#endif
+                return -1;
+        }
+        pattern += increment;
+    }
+#ifdef HAVE_setjmp_and_signal
+    signalsOff();
+#endif
+    return 0;
+}
+
+int memcopy(const volatile void* source, volatile void* dest, size_t size, int wordsize)
+{
+    size_t i;
+    struct timespec start, finished;
+    double sec;
+
+#ifdef HAVE_setjmp_and_signal
+    signalsOn();
+    if (sigsetjmp(addressFailEnv, 1) != 0)
+        return -1;
+#endif
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    switch (wordsize)
+    {
+        case 0:
+            memcpy((void*)dest, (const void*)source, size);
+            break;
+        case 1:
+        case -1:
+            for (i = 0; i < size; i++)
+                ((volatile uint8_t*)dest)[i] = ((const volatile uint8_t*)source)[i];
+            break;
+        case 2:
+            for (i = 0; i < size/2; i++)
+                ((volatile uint16_t*)dest)[i] = ((const volatile uint16_t*)source)[i];
+            break;
+        case 4:
+            for (i = 0; i < size/4; i++)
+                ((volatile uint32_t*)dest)[i] = ((const volatile uint32_t*)source)[i];
+            break;
+        case 8:
+            for (i = 0; i < size/8; i++)
+                ((volatile uint64_t*)dest)[i] = ((const volatile uint64_t*)source)[i];
+            break;
+        case -2:
+            for (i = 0; i < size/2; i++)
+                ((volatile uint16_t*)dest)[i] = bswap_16(((const volatile uint16_t*)source)[i]);
+            break;
+        case -4:
+            for (i = 0; i < size/4; i++)
+                ((volatile uint32_t*)dest)[i] = bswap_32(((const volatile uint32_t*)source)[i]);
+            break;
+        case -8:
+            for (i = 0; i < size/8; i++)
+                ((volatile uint64_t*)dest)[i] = bswap_64(((const volatile uint64_t*)source)[i]);
+            break;
+        default:
+            fprintf(stderr, "Illegal wordsize %d: must be 1, 2, 4, 8, -2, -4, -8\n", wordsize);
+#ifdef HAVE_setjmp_and_signal
+            signalsOff();
+#endif
+            return -1;
+    }
+    clock_gettime(CLOCK_MONOTONIC, &finished);
+#ifdef HAVE_setjmp_and_signal
+    signalsOff();
+#endif
+    finished.tv_sec  -= start.tv_sec;
+    if ((finished.tv_nsec -= start.tv_nsec) < 0)
+    {
+        finished.tv_nsec += 1000000000;
+        finished.tv_sec--;
+    }
+    sec = finished.tv_sec + finished.tv_nsec * 1e-9;
+    printf("%u %sB / %.3f msec (%.1f MiB/s = %.1f MB/s)\n",
+        (unsigned) (size >= 0x00100000 ? (size >> 20) : size >= 0x00000400 ? (size >> 10) : size),
+        size >= 0x00100000 ? "Mi" : size >= 0x00000400 ? "Ki" : "",
+        sec * 1000, size/sec/0x00100000, size/sec/1000000);
+    return 0;
+}
+
+int memcomp(const volatile void* source, const volatile void* dest, size_t size, int wordsize)
+{
+    size_t i;
+    int abswordsize = abs(wordsize);
+    unsigned long long s = 0, d = 0;
+
+#ifdef HAVE_setjmp_and_signal
+    signalsOn();
+    if (sigsetjmp(addressFailEnv, 1) != 0)
+        return -1;
+#endif
+    switch (wordsize)
+    {
+        case 0:
+        case 1:
+        case -1:
+            for (i = 0; i < size; i++)
+            {
+                s = ((const volatile uint8_t*)source)[i];
+                d = ((const volatile uint8_t*)dest)[i];
+                if (s != d) break;
+            }
+            break;
+        case 2:
+            for (i = 0; i < size; i+=2)
+            {
+                s = ((const volatile uint16_t*)source)[i/2];
+                d = ((const volatile uint16_t*)dest)[i/2];
+                if (s != d) break;
+            }
+            break;
+        case 4:
+            for (i = 0; i < size; i+=4)
+            {
+                s = ((const volatile uint32_t*)source)[i/4];
+                d = ((const volatile uint32_t*)dest)[i/4];
+                if (s != d) break;
+            }
+            break;
+        case 8:
+            for (i = 0; i < size; i+=8)
+            {
+                s = ((const volatile uint64_t*)source)[i/8];
+                d = ((const volatile uint64_t*)dest)[i/8];
+                if (s != d) break;
+            }
+            break;
+        case -2:
+            for (i = 0; i < size; i+=2)
+            {
+                s = bswap_16(((const volatile uint16_t*)source)[i/2]);
+                d = ((const volatile uint16_t*)dest)[i/2];
+                if (s != d) break;
+            }
+            break;
+        case -4:
+            for (i = 0; i < size; i+=4)
+            {
+                s = bswap_32(((const volatile uint32_t*)source)[i/4]);
+                d = ((const volatile uint32_t*)dest)[i/4];
+                if (s != d) break;
+            }
+            break;
+        case -8:
+            for (i = 0; i < size; i+=8)
+            {
+                s = bswap_64(((const volatile uint64_t*)source)[i/8]);
+                d = ((const volatile uint64_t*)dest)[i/8];
+                if (s != d) break;
+            }
+            break;
+        default:
+            fprintf(stderr, "Illegal wordsize %d: must be 1, 2, 4, 8, -2, -4, -8\n", wordsize);
+#ifdef HAVE_setjmp_and_signal
+            signalsOff();
+#endif
+            return -1;
+    }
+#ifdef HAVE_setjmp_and_signal
+    signalsOff();
+#endif
+    if (i < size) {
+        printf("Mismatch: at offset %#llx: 0x%0*llx != 0x%0*llx\n", (unsigned long long)i, abswordsize*2, s, abswordsize*2, d);
+        return 1;
+    }
+    else
+        printf("OK\n");
+    return 0;
 }
 
 unsigned long long strToSize(const char* str, char** endptr)

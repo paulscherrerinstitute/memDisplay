@@ -30,6 +30,10 @@ epicsShareFunc unsigned long long strToSize(const char* str, char** endptr);
 epicsShareFunc char* sizeToStr(unsigned long long size, char* str);
 epicsShareFunc volatile void* strToPtr(const char* addrstr, size_t size);
 
+epicsShareFunc int memfill(volatile void* address, int pattern, size_t size, int wordsize, int increment);
+epicsShareFunc int memcopy(const volatile void* source, volatile void* dest, size_t size, int wordsize);
+epicsShareFunc int memcomp(const volatile void* source, const volatile void* dest, size_t size, int wordsize);
+
 #ifdef __cplusplus
 }
 #endif

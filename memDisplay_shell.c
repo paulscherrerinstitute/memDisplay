@@ -9,9 +9,14 @@
 /* 3.14+ */
 #include <epicsStdioRedirect.h>
 #include <devLib.h>
+#include <envDefs.h>
 #include <iocsh.h>
 #else
 #define EPICS_3_13
+#endif
+
+#ifdef vxWorks
+#include "memLib.h"
 #endif
 
 #ifdef WITH_SYMBOLNAME
@@ -92,12 +97,12 @@ static remote_addr_t strToAddr(const char* addrstr, size_t offs, size_t size)
                 if (*q != 0)
                 {
                     /* rubbish at end */
-                    printf("Invalid address %s.\n", addrstr);
+                    fprintf(stderr, "Invalid address %s.\n", addrstr);
                     return (remote_addr_t){NULL, 0};
                 }
                 if (addr & ~(unsigned long long)((size_t)-1))
                 {
-                    printf("Too large address %s for %u bit.\n", addrstr, (int) sizeof(void*)*8);
+                    fprintf(stderr, "Too large address %s for %u bit.\n", addrstr, (int) sizeof(void*)*8);
                     return (remote_addr_t){NULL, 0};
                 }
             }
@@ -140,12 +145,12 @@ static remote_addr_t strToAddr(const char* addrstr, size_t offs, size_t size)
         if (*q != 0)
         {
             /* rubbish at end */
-            printf("Invalid address %s.\n", addrstr);
+            fprintf(stderr, "Invalid address %s.\n", addrstr);
             return (remote_addr_t){NULL, 0};
         }
         if (addr & ~(unsigned long long)((size_t)-1))
         {
-            printf("Too large address %s for %u bit.\n", addrstr, (int) sizeof(void*)*8);
+            fprintf(stderr, "Too large address %s for %u bit.\n", addrstr, (int) sizeof(void*)*8);
             return (remote_addr_t){NULL, 0};
         }
         return (remote_addr_t){(void*)(size_t) addr, addr};
@@ -220,11 +225,148 @@ static void mdFunc(const iocshArgBuf *args)
     md(args[0].sval, args[1].ival, args[2].ival);
 }
 
+static const iocshFuncDef mallocDef =
+    { "malloc", 1, (const iocshArg *[]) {
+    &(iocshArg) { "size", iocshArgString },
+}};
+
+static void mallocFunc(const iocshArgBuf *args)
+{
+    void *p;
+    char b[20];
+    p = valloc(strToSize(args[0].sval, NULL));
+    sprintf(b, "%p", p);
+    epicsEnvSet("BUFFER", b);
+    printf("BUFFER = %s\n", b);
+}
+
+static const iocshFuncDef memfillDef =
+    { "memfill", 5, (const iocshArg *[]) {
+    &(iocshArg) { "[addrspace:]address", iocshArgString },
+    &(iocshArg) { "pattern", iocshArgInt },
+    &(iocshArg) { "size", iocshArgString },
+    &(iocshArg) { "wordsize", iocshArgInt },
+    &(iocshArg) { "increment", iocshArgInt },
+}};
+
+static void memfillFunc(const iocshArgBuf *args)
+{
+    int pattern;
+    size_t size;
+    int wordsize;
+    int increment;
+    volatile void* address;
+
+    if (!args[0].sval)
+    {
+        iocshCmd("help memfill");
+        return;
+
+    }
+
+    size = strToSize(args[2].sval, NULL);
+    address = strToPtr(args[0].sval, size);
+    if (!address)
+    {
+        fprintf(stderr, "Cannot map address %s\n", args[0].sval);
+        return;
+    }
+
+    pattern = args[1].ival;
+    wordsize = args[3].ival;
+    increment = args[4].ival;
+    memfill(address, pattern, size, wordsize, increment);
+}
+
+static const iocshFuncDef memcopyDef =
+    { "memcopy", 4, (const iocshArg *[]) {
+    &(iocshArg) { "[addrspace:]source", iocshArgString },
+    &(iocshArg) { "[addrspace:]dest", iocshArgString },
+    &(iocshArg) { "size", iocshArgString },
+    &(iocshArg) { "wordsize", iocshArgInt },
+}};
+
+void memcopyFunc(const iocshArgBuf *args)
+{
+    volatile void* source;
+    volatile void* dest;
+    size_t size;
+    int wordsize;
+
+    if (!args[0].sval || !args[1].sval || !args[2].sval)
+    {
+        iocshCmd("help memcopy");
+        return;
+    }
+
+    size = strToSize(args[2].sval, NULL);
+    source = strToPtr(args[0].sval, size);
+    if (!source)
+    {
+        fprintf(stderr, "Cannot map source address %s\n", args[0].sval);
+        return;
+    }
+
+    dest = strToPtr(args[1].sval, size);
+    if (!dest)
+    {
+        fprintf(stderr, "Cannot map dest address %s\n", args[1].sval);
+        return;
+    }
+
+    wordsize = args[3].ival;
+    memcopy(source, dest, size, wordsize);
+}
+
+static const iocshFuncDef memcompDef =
+    { "memcomp", 4, (const iocshArg *[]) {
+    &(iocshArg) { "[addrspace:]source", iocshArgString },
+    &(iocshArg) { "[addrspace:]dest", iocshArgString },
+    &(iocshArg) { "size", iocshArgString },
+    &(iocshArg) { "wordsize", iocshArgInt },
+}};
+
+static void memcompFunc(const iocshArgBuf *args)
+{
+    volatile void* source;
+    volatile void* dest;
+    size_t size;
+    int wordsize;
+
+    if (!args[0].sval || !args[1].sval || !args[2].sval)
+    {
+        iocshCmd("help memcomp");
+        return;
+    }
+
+    size = strToSize(args[2].sval, NULL);
+    source = strToPtr(args[0].sval, size);
+    if (!source)
+    {
+        fprintf(stderr, "Cannot map source address %s\n", args[0].sval);
+        return;
+    }
+
+    dest = strToPtr(args[1].sval, size);
+    if (!dest)
+    {
+        fprintf(stderr, "Cannot map dest address %s\n", args[1].sval);
+        return;
+    }
+
+    wordsize = args[3].ival;
+    memcomp(source, dest, size, wordsize);
+}
+    
+
 static void memDisplayRegistrar(void)
 {
     iocshRegister(&mdDef, mdFunc);
+    iocshRegister(&mallocDef, mallocFunc);
+    iocshRegister(&memfillDef, memfillFunc);
+    iocshRegister(&memcopyDef, memcopyFunc);
+    iocshRegister(&memcompDef, memcompFunc);
 }
-
 epicsExportRegistrar(memDisplayRegistrar);
 
 #endif /* EPICS_3_13 */
