@@ -244,7 +244,7 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
         len += fprintf(file, "\n");
     }
     signalsOff();
-    return len;
+    return (int)len;
 }
 
 int memfill(volatile void* address, int pattern, size_t size, int wordsize, int increment)
