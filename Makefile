@@ -13,10 +13,4 @@ DBDS = memDisplay.dbd
 LIB_SRCS += memDisplay.c
 LIB_SRCS += memDisplay_shell.c
 
-ifdef symbolname
-# have the optional symbolname package?
-LIB_LIBS += symbolname
-USR_CFLAGS_DEFAULT+= -D WITH_SYMBOLNAME
-endif
-
 include $(TOP)/configure/RULES

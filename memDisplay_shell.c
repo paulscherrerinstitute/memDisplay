@@ -11,16 +11,13 @@
 #include <devLib.h>
 #include <envDefs.h>
 #include <iocsh.h>
+#include <epicsFindSymbol.h>
 #else
 #define EPICS_3_13
 #endif
 
 #ifdef vxWorks
 #include "memLib.h"
-#endif
-
-#ifdef WITH_SYMBOLNAME
-#include "symbolname.h"
 #endif
 
 #include "memDisplay.h"
@@ -130,9 +127,9 @@ static remote_addr_t strToAddr(const char* addrstr, size_t offs, size_t size)
         if (ptr) return (remote_addr_t){ptr, addr + offs};
     }
 
-    /* no aspace */
-#ifdef WITH_SYMBOLNAME
-    if (!addr && (ptr = symbolAddr(addrstr)) != NULL)
+    /* no addrspace */
+#ifndef EPICS_3_13
+    if (!addr && (ptr = epicsFindSymbol(addrstr)) != NULL)
     {
         /* global variable name */
         return (remote_addr_t){ptr + offs, (size_t)ptr + offs};
