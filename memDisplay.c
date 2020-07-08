@@ -99,6 +99,11 @@ static void signalsOn()
         fprintf(stderr, "Signal handlers installed for SIGSEGV(%d) and SIGBUS(%d)\n",
             SIGSEGV, SIGBUS);
 }
+#define catchSignals() (signalsOn(), sigsetjmp(addressFailEnv, 1))
+
+#else
+#define catchSignals() 0
+#define signalsOff()
 #endif
 
 int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_t bytes)
@@ -154,14 +159,10 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
         fprintf(stderr, "memDisplay: Round down base=0x%llx ptr=%p offset=%llu size=%llu\n",
             (unsigned long long)base, ptr, offset, (unsigned long long)size);
 
-#ifdef HAVE_setjmp_and_signal
-    signalsOn();
-    if (sigsetjmp(addressFailEnv, 1) != 0) {
+    if (catchSignals()) {
         fprintf(file, "<aborted>\n");
         return -1;
     }
-#endif
-
     for (i = 0; i < size; i += 16)
     {
         len += fprintf(file, "%0*llx: ", addr_wordsize, offset);
@@ -218,9 +219,7 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
         offset += 16;
         len += fprintf(file, "\n");
     }
-#ifdef HAVE_setjmp_and_signal
     signalsOff();
-#endif
     return len;
 }
 
@@ -236,11 +235,7 @@ int memfill(volatile void* address, int pattern, size_t size, int wordsize, int 
     }
     abswordsize = abs(wordsize);
 
-#ifdef HAVE_setjmp_and_signal
-    signalsOn();
-    if (sigsetjmp(addressFailEnv, 1) != 0)
-        return -1;
-#endif
+    if (catchSignals()) return -1;
     for (i = 0; i < size/abswordsize; i++)
     {
         switch (wordsize)
@@ -264,16 +259,12 @@ int memfill(volatile void* address, int pattern, size_t size, int wordsize, int 
                 break;
             default:
                 fprintf(stderr, "Illegal wordsize %d: must be 1, 2, 4, -2, -4\n", wordsize);
-#ifdef HAVE_setjmp_and_signal
                 signalsOff();
-#endif
                 return -1;
         }
         pattern += increment;
     }
-#ifdef HAVE_setjmp_and_signal
     signalsOff();
-#endif
     return 0;
 }
 
@@ -283,11 +274,7 @@ int memcopy(const volatile void* source, volatile void* dest, size_t size, int w
     struct timespec start, finished;
     double sec;
 
-#ifdef HAVE_setjmp_and_signal
-    signalsOn();
-    if (sigsetjmp(addressFailEnv, 1) != 0)
-        return -1;
-#endif
+    if (catchSignals()) return -1;
     clock_gettime(CLOCK_MONOTONIC, &start);
     switch (wordsize)
     {
@@ -325,15 +312,11 @@ int memcopy(const volatile void* source, volatile void* dest, size_t size, int w
             break;
         default:
             fprintf(stderr, "Illegal wordsize %d: must be 1, 2, 4, 8, -2, -4, -8\n", wordsize);
-#ifdef HAVE_setjmp_and_signal
             signalsOff();
-#endif
             return -1;
     }
     clock_gettime(CLOCK_MONOTONIC, &finished);
-#ifdef HAVE_setjmp_and_signal
     signalsOff();
-#endif
     finished.tv_sec  -= start.tv_sec;
     if ((finished.tv_nsec -= start.tv_nsec) < 0)
     {
@@ -354,11 +337,7 @@ int memcomp(const volatile void* source, const volatile void* dest, size_t size,
     int abswordsize = abs(wordsize);
     unsigned long long s = 0, d = 0;
 
-#ifdef HAVE_setjmp_and_signal
-    signalsOn();
-    if (sigsetjmp(addressFailEnv, 1) != 0)
-        return -1;
-#endif
+    if (catchSignals()) return -1;
     switch (wordsize)
     {
         case 0:
@@ -421,14 +400,10 @@ int memcomp(const volatile void* source, const volatile void* dest, size_t size,
             break;
         default:
             fprintf(stderr, "Illegal wordsize %d: must be 1, 2, 4, 8, -2, -4, -8\n", wordsize);
-#ifdef HAVE_setjmp_and_signal
             signalsOff();
-#endif
             return -1;
     }
-#ifdef HAVE_setjmp_and_signal
     signalsOff();
-#endif
     if (i < size) {
         printf("Mismatch: at offset %#llx: 0x%0*llx != 0x%0*llx\n", (unsigned long long)i, abswordsize*2, s, abswordsize*2, d);
         return 1;
