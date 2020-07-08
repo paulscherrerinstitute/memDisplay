@@ -117,6 +117,7 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
     size_t i, j, len = 0;
     int abswordsize = abs(wordsize);
     size_t size, mask;
+    volatile char *p = ptr;
 
     int addr_wordsize = ((base + bytes - 1) & UINT64_C(0xffff000000000000)) ? 16 :
                         ((base + bytes - 1) &     UINT64_C(0xffff00000000)) ? 12 :
@@ -146,21 +147,21 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
 
     /* align start to wordsize */
     mask = abs(wordsize)-1;
-    ptr = (volatile void*)((size_t)ptr - (base & mask));
+    p = (volatile void*)((size_t)p - (base & mask));
     base &= ~mask;
 
     if (memDisplayDebug)
         fprintf(stderr, "memDisplay: Adjusted base=0x%llx ptr=%p wordsize=%d\n",
-            (unsigned long long)base, ptr, wordsize);
+            (unsigned long long)base, p, wordsize);
 
     /* round down start address to multiple of 16 */
     offset = base & ~15;
     size = bytes + (base & 15);
-    ptr = (void*)((size_t)ptr - (base & 15));
+    p = (char*)((size_t)p - (base & 15));
 
     if (memDisplayDebug)
         fprintf(stderr, "memDisplay: Round down base=0x%llx ptr=%p offset=%llu size=%llu\n",
-            (unsigned long long)base, ptr, offset, (unsigned long long)size);
+            (unsigned long long)base, p, offset, (unsigned long long)size);
 
     if (catchSignals()) {
         fprintf(file, "<aborted>\n");
@@ -179,35 +180,35 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
                     case 1:
                     case -1:
                     {
-                        uint8_t x = *(volatile uint8_t*)ptr;
+                        uint8_t x = *(volatile uint8_t*)p;
                         *(uint8_t*)(buffer + j) = x;
                         len += fprintf(file, "%02" PRIx8 " ", x);
                         break;
                     }
                     case 2:
                     {
-                        uint16_t x = *(volatile uint16_t*)ptr;
+                        uint16_t x = *(volatile uint16_t*)p;
                         *(uint16_t*)(buffer + j) = x;
                         len += fprintf(file, "%04" PRIx16 " ", x);
                         break;
                     }
                     case 4:
                     {
-                        uint32_t x = *(volatile uint32_t*)ptr;
+                        uint32_t x = *(volatile uint32_t*)p;
                         *(uint32_t*)(buffer + j) = x;
                         len += fprintf(file, "%08" PRIx32 " ", x);
                         break;
                     }
                     case 8:
                     {
-                        uint64_t x = *(volatile uint64_t*)ptr;
+                        uint64_t x = *(volatile uint64_t*)p;
                         *(uint64_t*)(buffer + j) = x;
                         len += fprintf(file, "%016" PRIx64 " ", x);
                         break;
                     }
                     case -2:
                     {
-                        uint16_t x = *(volatile uint16_t*)ptr;
+                        uint16_t x = *(volatile uint16_t*)p;
                         x = bswap_16(x);
                         *(uint16_t*)(buffer + j) = x;
                         len += fprintf(file, "%04" PRIx16 " ", x);
@@ -215,7 +216,7 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
                     }
                     case -4:
                     {
-                        uint32_t x = *(volatile uint32_t*)ptr;
+                        uint32_t x = *(volatile uint32_t*)p;
                         x = bswap_32(x);
                         *(uint32_t*)(buffer + j) = x;
                         len += fprintf(file, "%08" PRIx32 " ", x);
@@ -223,7 +224,7 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
                     }
                     case -8:
                     {
-                        uint64_t x = *(volatile uint64_t*)ptr;
+                        uint64_t x = *(volatile uint64_t*)p;
                         x = bswap_64(x);
                         *(uint64_t*)(buffer + j) = x;
                         len += fprintf(file, "%016" PRIx64 " ", x);
@@ -231,7 +232,7 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
                     }
                 }
             }
-            ptr += abswordsize;
+            p += abswordsize;
         }
         fprintf(file, "| ");
         for (j = 0; j < 16; j++)
