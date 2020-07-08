@@ -10,7 +10,7 @@
 
 #ifdef __unix
 #define HAVE_byteswap
-#define HAVE_stdint
+#define HAVE_inttypes
 #define HAVE_setjmp_and_signal
 #endif
 
@@ -23,7 +23,7 @@
 #endif
 
 #ifdef _WIN32
-#define HAVE_stdint
+#define HAVE_inttypes
 #define bswap_16(x) _byteswap_ushort(x)
 #define bswap_32(x) _byteswap_ulong(x)
 #define bswap_64(x) _byteswap_uint64(x)
@@ -37,9 +37,13 @@
 #define bswap_64(x) (bswap_32(x)<<32 | bswap_32(x>>32))
 #endif
 
-#ifdef HAVE_stdint
-#include <stdint.h>
+#ifdef HAVE_inttypes
+#include <inttypes.h>
 #else
+#define PRIx8 "x"
+#define PRIx16 "x"
+#define PRIx32 "lx"
+#define PRIx64 "llx"
 #define UINT64_C(c) c ## ULL
 #endif
 
@@ -111,7 +115,6 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
     unsigned char buffer[16];
     unsigned long long offset;
     size_t i, j, len = 0;
-    unsigned long long x = 0;
     int abswordsize = abs(wordsize);
     size_t size, mask;
 
@@ -175,38 +178,58 @@ int fmemDisplay(FILE* file, size_t base, volatile void* ptr, int wordsize, size_
                 {
                     case 1:
                     case -1:
-                        x = *(uint8_t*)ptr;
+                    {
+                        uint8_t x = *(volatile uint8_t*)ptr;
                         *(uint8_t*)(buffer + j) = x;
+                        len += fprintf(file, "%02" PRIx8 " ", x);
                         break;
+                    }
                     case 2:
-                        x = *(uint16_t*)ptr;
+                    {
+                        uint16_t x = *(volatile uint16_t*)ptr;
                         *(uint16_t*)(buffer + j) = x;
+                        len += fprintf(file, "%04" PRIx16 " ", x);
                         break;
+                    }
                     case 4:
-                        x = *(uint32_t*)ptr;
+                    {
+                        uint32_t x = *(volatile uint32_t*)ptr;
                         *(uint32_t*)(buffer + j) = x;
+                        len += fprintf(file, "%08" PRIx32 " ", x);
                         break;
+                    }
                     case 8:
-                        x = *(uint64_t*)ptr;
+                    {
+                        uint64_t x = *(volatile uint64_t*)ptr;
                         *(uint64_t*)(buffer + j) = x;
+                        len += fprintf(file, "%016" PRIx64 " ", x);
                         break;
+                    }
                     case -2:
-                        x = *(uint16_t*)ptr;
+                    {
+                        uint16_t x = *(volatile uint16_t*)ptr;
                         x = bswap_16(x);
                         *(uint16_t*)(buffer + j) = x;
+                        len += fprintf(file, "%04" PRIx16 " ", x);
                         break;
+                    }
                     case -4:
-                        x = *(uint32_t*)ptr;
+                    {
+                        uint32_t x = *(volatile uint32_t*)ptr;
                         x = bswap_32(x);
                         *(uint32_t*)(buffer + j) = x;
+                        len += fprintf(file, "%08" PRIx32 " ", x);
                         break;
+                    }
                     case -8:
-                        x = *(uint64_t*)ptr;
+                    {
+                        uint64_t x = *(volatile uint64_t*)ptr;
                         x = bswap_64(x);
                         *(uint64_t*)(buffer + j) = x;
-                        break;
+                        len += fprintf(file, "%016" PRIx64 " ", x);
+                       break;
+                    }
                 }
-                len += fprintf(file, "%0*llx ", 2*abswordsize, x);
             }
             ptr += abswordsize;
         }
