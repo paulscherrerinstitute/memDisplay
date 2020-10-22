@@ -87,6 +87,7 @@ static remote_addr_t strToAddr(const char* addrstr, size_t offs, size_t size)
     struct addressHandlerItem* hitem;
     struct addressTranslatorItem* titem;
     char *p, *q;
+    char c;
 
     for (hitem = addressHandlerList; hitem != NULL; hitem = hitem->next)
     {
@@ -141,6 +142,10 @@ static remote_addr_t strToAddr(const char* addrstr, size_t offs, size_t size)
         return (remote_addr_t){ptr + offs, (size_t)ptr + offs};
     }
 #endif
+    if (sscanf(addrstr, "%p%c", &ptr, &c) == 1) {
+        ptr += offs;
+        return (remote_addr_t){ptr + offs, (size_t)ptr + offs};
+    }
     addr = strToSize(addrstr, &q) + offs;
     if (q > addrstr)
     {
@@ -148,7 +153,7 @@ static remote_addr_t strToAddr(const char* addrstr, size_t offs, size_t size)
         if (*q != 0)
         {
             /* rubbish at end */
-            fprintf(stderr, "Invalid address %s.\n", addrstr);
+            fprintf(stderr, "Unparsable address %s\n", addrstr);
             return (remote_addr_t){NULL, 0};
         }
         if (addr & ~(unsigned long long)((size_t)-1))
