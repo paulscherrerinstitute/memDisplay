@@ -1,3 +1,9 @@
+#ifdef _WIN32
+#include <Windows.h>
+#include <memoryapi.h>
+#define valloc(size) VirtualAlloc(NULL, size, MEM_COMMIT, PAGE_READWRITE)
+#endif
+
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -17,7 +23,7 @@
 #endif
 
 #ifdef vxWorks
-#include "memLib.h"
+#include <memLib.h>
 #endif
 
 #include "memDisplay.h"
@@ -77,7 +83,7 @@ static remote_addr_t strToAddr(const char* addrstr, size_t offs, size_t size)
 {
     unsigned long long addr = 0;
     size_t len;
-    volatile void* ptr = NULL;
+    volatile char* ptr = NULL;
     struct addressHandlerItem* hitem;
     struct addressTranslatorItem* titem;
     char *p, *q;

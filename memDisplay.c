@@ -2,6 +2,20 @@
 #define _GNU_SOURCE
 #endif
 
+#ifdef _WIN32
+#include <Windows.h>
+#include <sysinfoapi.h>
+#define HAVE_inttypes
+#define bswap_16(x) _byteswap_ushort(x)
+#define bswap_32(x) _byteswap_ulong(x)
+#define bswap_64(x) _byteswap_uint64(x)
+#define clock_gettime(clock, stamp) do { \
+        DWORD tick = GetTickCount(); \
+        (stamp)->tv_sec=tick/1000; \
+        (stamp)->tv_nsec=1000000ULL*(tick-(stamp)->tv_sec*1000); \
+    } while(0)
+#endif
+
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -19,14 +33,12 @@
 #define bswap_32(x) LONGSWAP(x)
 #include <tickLib.h>
 #include <sysLib.h>
-#define clock_gettime(clock, stamp) do {int tick = tickGet(); int rate = sysClkRateGet(); (stamp)->tv_sec=tick/rate; (stamp)->tv_nsec=1000000000ULL*(tick-(stamp)->tv_sec*rate)/rate;} while(0)
-#endif
-
-#ifdef _WIN32
-#define HAVE_inttypes
-#define bswap_16(x) _byteswap_ushort(x)
-#define bswap_32(x) _byteswap_ulong(x)
-#define bswap_64(x) _byteswap_uint64(x)
+#define clock_gettime(clock, stamp) do { \
+        int tick = tickGet(); \
+        int freq = sysClkRateGet(); \
+        (stamp)->tv_sec=tick/freq; \
+        (stamp)->tv_nsec=1000000000ULL*(tick-(stamp)->tv_sec*freq)/freq; \
+    } while(0)
 #endif
 
 #ifdef HAVE_byteswap
