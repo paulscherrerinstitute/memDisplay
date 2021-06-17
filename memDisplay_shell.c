@@ -9,23 +9,18 @@
 #include <stdio.h>
 #include <errno.h>
 #include <epicsString.h>
-#include <epicsVersion.h>
 
-#ifndef BASE_VERSION
-/* 3.14+ */
 #include <epicsStdioRedirect.h>
 #include <devLib.h>
 #include <envDefs.h>
 #include <iocsh.h>
 #include <epicsFindSymbol.h>
-#else
-#define EPICS_3_13
-#endif
 
 #ifdef vxWorks
 #include <memLib.h>
 #endif
 
+#include "epicsExport.h"
 #include "memDisplay.h"
 
 struct addressHandlerItem {
@@ -135,13 +130,11 @@ static remote_addr_t strToAddr(const char* addrstr, size_t offs, size_t size)
     }
 
     /* no addrspace */
-#ifndef EPICS_3_13
     if (!addr && (ptr = epicsFindSymbol(addrstr)) != NULL)
     {
         /* global variable name */
         return (remote_addr_t){ptr + offs, (size_t)ptr + offs};
     }
-#endif
     if (sscanf(addrstr, "%p%c", &ptr, &c) == 1) {
         ptr += offs;
         return (remote_addr_t){ptr + offs, (size_t)ptr + offs};
@@ -189,12 +182,8 @@ void md(const char* addrStr, int wordsize, int bytes)
     }
     if (addrStr)
     {
-#ifdef vxWorks
-        old_addrStr = (char*)addrStr;
-#else
         free(old_addrStr);
         old_addrStr = epicsStrDup(addrStr);
-#endif
         old_offs = 0;
         old_wordsize = 2;
     }
@@ -218,8 +207,6 @@ void md(const char* addrStr, int wordsize, int bytes)
     old_addr = addr;
 }
 
-#ifndef EPICS_3_13
-#include <epicsExport.h>
 epicsExportAddress(int, memDisplayDebug);
 
 static const iocshArg mdArg0 = { "[addrspace:]address", iocshArgString };
@@ -365,7 +352,6 @@ static void memcompFunc(const iocshArgBuf *args)
     wordsize = args[3].ival;
     memcomp(source, dest, size, wordsize);
 }
-    
 
 static void memDisplayRegistrar(void)
 {
@@ -376,5 +362,3 @@ static void memDisplayRegistrar(void)
     iocshRegister(&memcompDef, memcompFunc);
 }
 epicsExportRegistrar(memDisplayRegistrar);
-
-#endif /* EPICS_3_13 */
