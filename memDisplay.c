@@ -12,7 +12,7 @@
 #define clock_gettime(clock, stamp) do { \
         DWORD tick = GetTickCount(); \
         (stamp)->tv_sec=tick/1000; \
-        (stamp)->tv_nsec=1000000ULL*(tick-(stamp)->tv_sec*1000); \
+        (stamp)->tv_nsec=(long)(1000000ULL*(tick-(stamp)->tv_sec*1000)); \
     } while(0)
 #endif
 
@@ -67,6 +67,8 @@
 #if !(XOPEN_SOURCE >= 600 || _BSD_SOURCE || _SVID_SOURCE || _ISOC99_SOURCE)
 #define strtoull strtoul
 #endif
+
+#include "epicsExport.h"
 
 #include "memDisplay.h"
 #undef memDisplay

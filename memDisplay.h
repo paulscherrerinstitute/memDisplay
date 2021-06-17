@@ -3,12 +3,7 @@
 
 #include <stdio.h>
 
-#ifndef epicsShareExtern
-#define epicsShareExtern extern
-#endif
-#ifndef epicsShareFunc
-#define epicsShareFunc
-#endif
+#include "shareLib.h"
 
 #ifdef __cplusplus
 extern "C" {
